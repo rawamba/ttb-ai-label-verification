@@ -1,6 +1,7 @@
 using LabelVerification.Application;
 using LabelVerification.Infrastructure;
 using LabelVerification.Web.Components;
+using LabelVerification.Web.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,6 +20,10 @@ builder.Services.AddRazorComponents()
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
+
+// Establish request correlation before other middleware executes so logs,
+// errors, OCR processing, and verification activity can share one identifier.
+app.UseMiddleware<CorrelationIdMiddleware>();
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
