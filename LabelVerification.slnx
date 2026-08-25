@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LabelVerification.Application/LabelVerification.Application.csproj" />
+    <Project Path="src/LabelVerification.Domain/LabelVerification.Domain.csproj" />
+    <Project Path="src/LabelVerification.Infrastructure/LabelVerification.Infrastructure.csproj" />
+    <Project Path="src/LabelVerification.Web/LabelVerification.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LabelVerification.IntegrationTests/LabelVerification.IntegrationTests.csproj" />
+    <Project Path="tests/LabelVerification.UnitTests/LabelVerification.UnitTests.csproj" />
+  </Folder>
+</Solution>
