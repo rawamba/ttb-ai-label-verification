@@ -1,0 +1,14 @@
+{
+  "applicationId": "COLA-84729",
+  "beverageType": "distilled_spirits",
+  "expectedData": {
+    "brandName": "Old Tom Distillery",
+    "classType": "Kentucky Straight Bourbon Whiskey",
+    "alcoholByVolume": 45.0,
+    "proof": 90,
+    "netContents": {
+      "value": 750,
+      "unit": "mL"
+    }
+  }
+}
