@@ -1,0 +1,25 @@
+﻿# Normalize text files in the repository to LF in Git.
+# Developers may use platform-native line endings in their working tree,
+# while CI receives deterministic repository content.
+* text=auto
+
+# Source and configuration files should use LF consistently.
+*.cs      text eol=lf
+*.csproj  text eol=lf
+*.slnx    text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.json    text eol=lf
+*.md      text eol=lf
+
+# Windows-specific scripts retain CRLF.
+*.ps1     text eol=crlf
+*.bat     text eol=crlf
+*.cmd     text eol=crlf
+
+# Binary files must never be line-ending normalized.
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.pdf     binary
