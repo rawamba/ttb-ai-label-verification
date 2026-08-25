@@ -1,7 +1,7 @@
 # Azure Pipelines CI/CD definition for the TTB Label Verification prototype.
 #
 # Pull requests targeting main are built and tested but never deployed.
-# Changes merged to main are built, tested, published once, and the same
+# Changes merged to main are built, tested, packaged once, and the same
 # validated artifact is deployed to the Azure prototype environment.
 
 trigger:
@@ -29,11 +29,11 @@ variables:
 
 stages:
 
-# ---------------------------------------------------------------------------
-# BUILD AND TEST
-# ---------------------------------------------------------------------------
-# This stage runs for both pull requests and main-branch CI.
-# It produces the single application artifact later consumed by deployment.
+# ===========================================================================
+# BUILD, TEST, AND PACKAGE
+# ===========================================================================
+# Runs for both pull requests and main-branch CI.
+# No Azure deployment occurs from a pull-request build.
 - stage: BuildAndTest
   displayName: Build, Test, and Package
 
@@ -43,15 +43,16 @@ stages:
 
     steps:
 
+    # The application targets net8.0, so the hosted agent needs the .NET 8
+    # runtime to execute unit and integration test assemblies.
     - task: UseDotNet@2
       displayName: Install .NET 8 SDK and runtime
       inputs:
         packageType: sdk
         version: '8.0.x'
 
-    # The repository uses SDK 10.0.300 as its build toolchain because the
-    # solution uses the .slnx format. Projects themselves continue to
-    # target net8.0.
+    # SDK 10.0.300 is the repository build toolchain and supports the .slnx
+    # solution format. The application itself continues to target net8.0.
     - task: UseDotNet@2
       displayName: Install .NET 10 SDK
       inputs:
@@ -67,8 +68,6 @@ stages:
         --no-restore
       displayName: Build solution
 
-    # Unit and integration tests execute before any deployable artifact
-    # is produced.
     - script: >
         dotnet test $(solution)
         --configuration $(buildConfiguration)
@@ -77,7 +76,7 @@ stages:
         --results-directory "$(Agent.TempDirectory)/TestResults"
       displayName: Run automated tests
 
-    # Publish results even when tests fail so diagnostics remain available.
+    # Preserve test evidence even when a test fails.
     - task: PublishTestResults@2
       displayName: Publish test results
       condition: succeededOrFailed()
@@ -94,20 +93,32 @@ stages:
         --output "$(Build.ArtifactStagingDirectory)/web"
       displayName: Publish web application
 
-    # Preserve the exact validated application output as a pipeline artifact.
+    # Package the already-built application into a deterministic deployment
+    # artifact. Deployment will consume this ZIP without rebuilding source.
+    - task: ArchiveFiles@2
+      displayName: Package web application
+      inputs:
+        rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/web'
+        includeRootFolder: false
+        archiveType: zip
+        archiveFile: '$(Build.ArtifactStagingDirectory)/label-verification-web.zip'
+        replaceExistingArchive: true
+
     - task: PublishPipelineArtifact@1
       displayName: Publish application artifact
       inputs:
-        targetPath: '$(Build.ArtifactStagingDirectory)/web'
+        targetPath: '$(Build.ArtifactStagingDirectory)/label-verification-web.zip'
         artifact: label-verification-web
         publishLocation: pipeline
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # DEPLOY
-# ---------------------------------------------------------------------------
-# Deployment occurs only for successful main-branch runs.
-# Pull-request validation therefore cannot modify the Azure environment.
+# ===========================================================================
+# Deploy only after a successful main-branch build.
+#
+# Pull requests execute BuildAndTest but this stage is intentionally skipped,
+# preventing unmerged code from modifying the evaluator-facing environment.
 - stage: Deploy
   displayName: Deploy Prototype to Azure
   dependsOn: BuildAndTest
@@ -124,8 +135,7 @@ stages:
 
     steps:
 
-    # Download the artifact produced by BuildAndTest rather than rebuilding
-    # application source during deployment.
+    # Download the exact artifact produced by the BuildAndTest stage.
     - task: DownloadPipelineArtifact@2
       displayName: Download validated application artifact
       inputs:
@@ -133,24 +143,24 @@ stages:
         artifactName: label-verification-web
         targetPath: '$(Pipeline.Workspace)/label-verification-web'
 
-    # Deploy the validated application artifact to the Linux App Service.
+    # Deploy the previously validated package to the Linux App Service.
     - task: AzureWebApp@1
       displayName: Deploy to Azure App Service
       inputs:
         azureSubscription: '$(azureServiceConnection)'
         appType: webAppLinux
         appName: '$(webAppName)'
-        package: '$(Pipeline.Workspace)/label-verification-web'
+        package: '$(Pipeline.Workspace)/label-verification-web/label-verification-web.zip'
         runtimeStack: 'DOTNETCORE|8.0'
 
-    # Verify that the deployed application has started successfully.
-    # Retry briefly because App Service may need time to restart after deployment.
+    # Confirm that App Service restarted successfully and that the application
+    # responds through its operational health endpoint.
     - bash: |
         set -e
 
         HEALTH_URL="$(webAppUrl)/health"
 
-        echo "Checking application health at: ${HEALTH_URL}"
+        echo "Checking application health at ${HEALTH_URL}"
 
         curl \
           --fail \
