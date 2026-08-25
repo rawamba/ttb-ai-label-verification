@@ -14,6 +14,10 @@ builder.Services
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// Register a lightweight health check endpoint so deployment automation and
+// operators can verify that the application host is running successfully.
+builder.Services.AddHealthChecks();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -32,5 +36,9 @@ app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+// Expose a platform-neutral endpoint for deployment smoke tests and
+// operational availability checks.
+app.MapHealthChecks("/health");
 
 app.Run();
