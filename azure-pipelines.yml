@@ -1,0 +1,84 @@
+# Azure Pipelines CI definition for the TTB Label Verification prototype.
+#
+# This pipeline validates pull requests targeting main and changes merged
+# to main. The SDK is installed explicitly to keep CI reproducible.
+
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  buildConfiguration: Release
+  solution: LabelVerification.slnx
+  webProject: src/LabelVerification.Web/LabelVerification.Web.csproj
+
+steps:
+
+# Install the .NET 8 SDK so the CI agent has the runtime required to execute
+# projects and tests that target net8.0. Installing the SDK also provides the
+# ASP.NET Core runtime needed by future Web integration tests.
+- task: UseDotNet@2
+  displayName: Install .NET 8 SDK and runtime
+  inputs:
+    packageType: sdk
+    version: '8.0.x'
+
+# Install the .NET 10 SDK used as this repository's build toolchain.
+# global.json pins the solution to 10.0.300, which also supports the .slnx
+# solution format while the application itself continues to target net8.0.
+- task: UseDotNet@2
+  displayName: Install .NET 10 SDK
+  inputs:
+    packageType: sdk
+    version: '10.0.300'
+
+# Restore NuGet dependencies for the complete solution.
+- script: dotnet restore $(solution)
+  displayName: Restore dependencies
+
+# Build all projects in Release configuration.
+- script: dotnet build $(solution) --configuration $(buildConfiguration) --no-restore
+  displayName: Build solution
+
+# Execute unit and integration tests and generate TRX results.
+- script: >
+    dotnet test $(solution)
+    --configuration $(buildConfiguration)
+    --no-build
+    --logger "trx"
+    --results-directory "$(Agent.TempDirectory)/TestResults"
+  displayName: Run automated tests
+
+# Publish test results even when tests fail so diagnostics remain available.
+- task: PublishTestResults@2
+  displayName: Publish test results
+  condition: succeededOrFailed()
+  inputs:
+    testResultsFormat: VSTest
+    testResultsFiles: '$(Agent.TempDirectory)/TestResults/**/*.trx'
+    failTaskOnFailedTests: true
+
+# Produce a deployable version of the Blazor Web application.
+- script: >
+    dotnet publish $(webProject)
+    --configuration $(buildConfiguration)
+    --no-build
+    --output "$(Build.ArtifactStagingDirectory)/web"
+  displayName: Publish web application
+
+# Store the deployable output as a pipeline artifact for later deployment.
+- task: PublishPipelineArtifact@1
+  displayName: Publish application artifact
+  inputs:
+    targetPath: '$(Build.ArtifactStagingDirectory)/web'
+    artifact: label-verification-web
+    publishLocation: pipeline
