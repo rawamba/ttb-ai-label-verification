@@ -5,6 +5,19 @@
     <ProjectReference Include="..\LabelVerification.Infrastructure\LabelVerification.Infrastructure.csproj" />
   </ItemGroup>
 
+	<ItemGroup>
+		<!--
+    Prototype application fixtures are linked into the Web project so the
+    JSON-backed provider works consistently during local execution and after
+    Azure publish. A production COLA adapter would replace these fixtures.
+  -->
+		<Content Include="..\..\sample-data\applications\**\*.json">
+			<Link>sample-data\applications\%(RecursiveDir)%(Filename)%(Extension)</Link>
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+		</Content>
+	</ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
