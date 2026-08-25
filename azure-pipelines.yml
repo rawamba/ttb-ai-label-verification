@@ -1,4 +1,4 @@
-﻿# Azure Pipelines CI definition for the TTB Label Verification prototype.
+# Azure Pipelines CI definition for the TTB Label Verification prototype.
 #
 # This pipeline validates pull requests targeting main and changes merged
 # to main. The SDK is installed explicitly to keep CI reproducible.
