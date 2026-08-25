@@ -1,7 +1,8 @@
-# Azure Pipelines CI definition for the TTB Label Verification prototype.
+# Azure Pipelines CI/CD definition for the TTB Label Verification prototype.
 #
-# This pipeline validates pull requests targeting main and changes merged
-# to main. The SDK is installed explicitly to keep CI reproducible.
+# Pull requests targeting main are built and tested but never deployed.
+# Changes merged to main are built, tested, packaged once, and the same
+# validated artifact is deployed to the Azure prototype environment.
 
 trigger:
   branches:
@@ -21,64 +22,156 @@ variables:
   solution: LabelVerification.slnx
   webProject: src/LabelVerification.Web/LabelVerification.Web.csproj
 
-steps:
+  # Azure deployment configuration.
+  azureServiceConnection: sc-ttb-label-verification-prototype
+  webAppName: ttb-label-verification-iwluomsqzvz26
+  webAppUrl: https://ttb-label-verification-iwluomsqzvz26.azurewebsites.net
 
-# Install the .NET 8 SDK so the CI agent has the runtime required to execute
-# projects and tests that target net8.0. Installing the SDK also provides the
-# ASP.NET Core runtime needed by future Web integration tests.
-- task: UseDotNet@2
-  displayName: Install .NET 8 SDK and runtime
-  inputs:
-    packageType: sdk
-    version: '8.0.x'
+stages:
 
-# Install the .NET 10 SDK used as this repository's build toolchain.
-# global.json pins the solution to 10.0.300, which also supports the .slnx
-# solution format while the application itself continues to target net8.0.
-- task: UseDotNet@2
-  displayName: Install .NET 10 SDK
-  inputs:
-    packageType: sdk
-    version: '10.0.300'
+# ===========================================================================
+# BUILD, TEST, AND PACKAGE
+# ===========================================================================
+# Runs for both pull requests and main-branch CI.
+# No Azure deployment occurs from a pull-request build.
+- stage: BuildAndTest
+  displayName: Build, Test, and Package
 
-# Restore NuGet dependencies for the complete solution.
-- script: dotnet restore $(solution)
-  displayName: Restore dependencies
+  jobs:
+  - job: Build
+    displayName: Build and validate application
 
-# Build all projects in Release configuration.
-- script: dotnet build $(solution) --configuration $(buildConfiguration) --no-restore
-  displayName: Build solution
+    steps:
 
-# Execute unit and integration tests and generate TRX results.
-- script: >
-    dotnet test $(solution)
-    --configuration $(buildConfiguration)
-    --no-build
-    --logger "trx"
-    --results-directory "$(Agent.TempDirectory)/TestResults"
-  displayName: Run automated tests
+    # The application targets net8.0, so the hosted agent needs the .NET 8
+    # runtime to execute unit and integration test assemblies.
+    - task: UseDotNet@2
+      displayName: Install .NET 8 SDK and runtime
+      inputs:
+        packageType: sdk
+        version: '8.0.x'
 
-# Publish test results even when tests fail so diagnostics remain available.
-- task: PublishTestResults@2
-  displayName: Publish test results
-  condition: succeededOrFailed()
-  inputs:
-    testResultsFormat: VSTest
-    testResultsFiles: '$(Agent.TempDirectory)/TestResults/**/*.trx'
-    failTaskOnFailedTests: true
+    # SDK 10.0.300 is the repository build toolchain and supports the .slnx
+    # solution format. The application itself continues to target net8.0.
+    - task: UseDotNet@2
+      displayName: Install .NET 10 SDK
+      inputs:
+        packageType: sdk
+        version: '10.0.300'
 
-# Produce a deployable version of the Blazor Web application.
-- script: >
-    dotnet publish $(webProject)
-    --configuration $(buildConfiguration)
-    --no-build
-    --output "$(Build.ArtifactStagingDirectory)/web"
-  displayName: Publish web application
+    - script: dotnet restore $(solution)
+      displayName: Restore dependencies
 
-# Store the deployable output as a pipeline artifact for later deployment.
-- task: PublishPipelineArtifact@1
-  displayName: Publish application artifact
-  inputs:
-    targetPath: '$(Build.ArtifactStagingDirectory)/web'
-    artifact: label-verification-web
-    publishLocation: pipeline
+    - script: >
+        dotnet build $(solution)
+        --configuration $(buildConfiguration)
+        --no-restore
+      displayName: Build solution
+
+    - script: >
+        dotnet test $(solution)
+        --configuration $(buildConfiguration)
+        --no-build
+        --logger "trx"
+        --results-directory "$(Agent.TempDirectory)/TestResults"
+      displayName: Run automated tests
+
+    # Preserve test evidence even when a test fails.
+    - task: PublishTestResults@2
+      displayName: Publish test results
+      condition: succeededOrFailed()
+      inputs:
+        testResultsFormat: VSTest
+        testResultsFiles: '$(Agent.TempDirectory)/TestResults/**/*.trx'
+        failTaskOnFailedTests: true
+
+    # Produce the deployable Web application only after successful validation.
+    - script: >
+        dotnet publish $(webProject)
+        --configuration $(buildConfiguration)
+        --no-build
+        --output "$(Build.ArtifactStagingDirectory)/web"
+      displayName: Publish web application
+
+    # Package the already-built application into a deterministic deployment
+    # artifact. Deployment will consume this ZIP without rebuilding source.
+    - task: ArchiveFiles@2
+      displayName: Package web application
+      inputs:
+        rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/web'
+        includeRootFolder: false
+        archiveType: zip
+        archiveFile: '$(Build.ArtifactStagingDirectory)/label-verification-web.zip'
+        replaceExistingArchive: true
+
+    - task: PublishPipelineArtifact@1
+      displayName: Publish application artifact
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/label-verification-web.zip'
+        artifact: label-verification-web
+        publishLocation: pipeline
+
+
+# ===========================================================================
+# DEPLOY
+# ===========================================================================
+# Deploy only after a successful main-branch build.
+#
+# Pull requests execute BuildAndTest but this stage is intentionally skipped,
+# preventing unmerged code from modifying the evaluator-facing environment.
+- stage: Deploy
+  displayName: Deploy Prototype to Azure
+  dependsOn: BuildAndTest
+
+  condition: >
+    and(
+      succeeded(),
+      eq(variables['Build.SourceBranch'], 'refs/heads/main')
+    )
+
+  jobs:
+  - job: DeployWeb
+    displayName: Deploy validated artifact
+
+    steps:
+
+    # Download the exact artifact produced by the BuildAndTest stage.
+    - task: DownloadPipelineArtifact@2
+      displayName: Download validated application artifact
+      inputs:
+        buildType: current
+        artifactName: label-verification-web
+        targetPath: '$(Pipeline.Workspace)/label-verification-web'
+
+    # Deploy the previously validated package to the Linux App Service.
+    - task: AzureWebApp@1
+      displayName: Deploy to Azure App Service
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        appType: webAppLinux
+        appName: '$(webAppName)'
+        package: '$(Pipeline.Workspace)/label-verification-web/label-verification-web.zip'
+        runtimeStack: 'DOTNETCORE|8.0'
+
+    # Confirm that App Service restarted successfully and that the application
+    # responds through its operational health endpoint.
+    - bash: |
+        set -e
+
+        HEALTH_URL="$(webAppUrl)/health"
+
+        echo "Checking application health at ${HEALTH_URL}"
+
+        curl \
+          --fail \
+          --silent \
+          --show-error \
+          --location \
+          --retry 12 \
+          --retry-delay 5 \
+          --retry-all-errors \
+          "${HEALTH_URL}"
+
+        echo
+        echo "Deployment health check succeeded."
+      displayName: Smoke test deployed /health endpoint

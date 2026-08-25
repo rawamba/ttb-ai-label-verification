@@ -508,3 +508,6 @@ output/
 # OS/editor extras
 .DS_Store
 Thumbs.db
+
+# Generated ARM template output from Bicep builds
+infra/*.json
