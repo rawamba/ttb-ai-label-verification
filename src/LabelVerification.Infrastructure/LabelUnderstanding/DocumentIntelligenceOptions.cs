@@ -21,4 +21,10 @@ public sealed class DocumentIntelligenceOptions
     /// Maximum time allowed for a single OCR request.
     /// </summary>
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(5);
+
+/// <summary>
+/// Enables Azure Document Intelligence font-style extraction so regulatory
+/// rules can evaluate visual requirements such as bold warning headings.
+/// </summary>
+public bool EnableFontStyling { get; init; } = true;
 }

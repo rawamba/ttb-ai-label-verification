@@ -53,4 +53,10 @@ public sealed record OcrResult
     /// Provider model identifier or model version when available.
     /// </summary>
     public string? ModelVersion { get; init; }
+
+    /// <summary>
+    /// Optional typography evidence associated with spans of OCR text.
+    /// Providers that cannot establish typography may return an empty collection.
+    /// </summary>
+    public IReadOnlyList<OcrTextStyle> Styles { get; init; } = [];
 }
