@@ -1,0 +1,261 @@
+@using LabelVerification.Application.Verification
+
+@if (ReviewChecks.Count > 0)
+{
+    <div class="alert alert-warning mt-4"
+         role="status"
+         aria-label="Fields requiring human review">
+
+        <div class="fw-semibold mb-1">
+            Human review required
+        </div>
+
+        <div class="small mb-2">
+            The automated workflow could not make a sufficiently certain
+            determination for the following field@(ReviewChecks.Count == 1 ? "" : "s"):
+        </div>
+
+        <ul class="mb-2">
+            @foreach (var reviewCheck in ReviewChecks)
+            {
+                <li>
+                    <span class="fw-semibold">
+                        @reviewCheck.Field
+                    </span>
+                </li>
+            }
+        </ul>
+
+        <div class="small">
+            Review the detected evidence and explanation below before making
+            the final compliance determination.
+        </div>
+    </div>
+}
+
+<div class="mt-4">
+
+    <div class="mb-3">
+        <h2 class="h5 mb-1">
+            Field verification details
+        </h2>
+
+        <p class="text-secondary small mb-0">
+            Each result shows the application value, detected label value,
+            supporting confidence where available, and the deterministic
+            reason for the automated status.
+        </p>
+    </div>
+
+    @foreach (var check in Verification.Checks)
+    {
+        <article class="card mb-3 border-start border-4 @GetBorderClass(check.Status)">
+            <div class="card-body">
+
+                <div class="d-flex flex-wrap
+                            justify-content-between
+                            align-items-center
+                            gap-2 mb-3">
+
+                    <h3 class="h6 mb-0">
+                        @check.Field
+                    </h3>
+
+                    <span class="badge @GetBadgeClass(check.Status)">
+                        @FormatStatus(check.Status)
+                    </span>
+                </div>
+
+                @if (check.Status == VerificationStatus.Review)
+                {
+                    <div class="alert alert-warning py-2 small mb-3">
+                        This field is ambiguous or lacks sufficient evidence
+                        for an automated determination. Human review is required.
+                    </div>
+                }
+
+                <div class="row g-3">
+
+                    <div class="col-12 col-md-6">
+                        <div class="small text-secondary fw-semibold mb-1">
+                            Expected value
+                        </div>
+
+                        <div class="border rounded p-2 bg-body-tertiary
+                                    text-break h-100">
+                            @DisplayValue(check.ExpectedValue)
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <div class="small text-secondary fw-semibold mb-1">
+                            Detected value
+                        </div>
+
+                        <div class="border rounded p-2 bg-body-tertiary
+                                    text-break h-100">
+                            @DisplayValue(check.ObservedValue)
+                        </div>
+                    </div>
+
+                </div>
+
+                @if (check.EvidenceConfidence is not null ||
+                     check.Similarity is not null)
+                {
+                    <div class="d-flex flex-wrap gap-3 mt-3 small">
+
+                        @if (check.EvidenceConfidence is not null)
+                        {
+                            <div>
+                                <span class="text-secondary">
+                                    OCR confidence:
+                                </span>
+
+                                <span class="fw-semibold">
+                                    @FormatPercentage(
+                                        check.EvidenceConfidence.Value)
+                                </span>
+                            </div>
+                        }
+
+                        @if (check.Similarity is not null)
+                        {
+                            <div>
+                                <span class="text-secondary">
+                                    Match score:
+                                </span>
+
+                                <span class="fw-semibold">
+                                    @FormatPercentage(
+                                        check.Similarity.Value)
+                                </span>
+                            </div>
+                        }
+
+                    </div>
+                }
+
+                <div class="mt-3">
+                    <div class="small text-secondary fw-semibold mb-1">
+                        Explanation
+                    </div>
+
+                    <div>
+                        @check.Explanation
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(check.Evidence))
+                {
+                    <details class="mt-3">
+                        <summary class="small fw-semibold">
+                            OCR evidence
+                        </summary>
+
+                        <div class="border rounded bg-body-tertiary
+                                    p-2 mt-2 small text-break">
+                            @check.Evidence
+                        </div>
+                    </details>
+                }
+
+            </div>
+        </article>
+    }
+
+    <div class="border rounded bg-body-tertiary p-3 small mt-4">
+        <div class="fw-semibold mb-1">
+            Compliance decision authority
+        </div>
+
+        <div class="text-secondary">
+            These automated results are decision-support evidence only.
+            PASS, NEEDS REVIEW, and FAIL statuses do not replace the
+            compliance agent's final determination.
+        </div>
+    </div>
+
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public VerificationResult Verification { get; set; } = default!;
+
+    private IReadOnlyList<VerificationCheckResult> ReviewChecks =>
+        Verification.Checks
+            .Where(check =>
+                check.Status == VerificationStatus.Review)
+            .ToArray();
+
+    private static string DisplayValue(
+        string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? "Not available"
+            : value;
+    }
+
+    private static string FormatPercentage(
+        double value)
+    {
+        return value.ToString("P1");
+    }
+
+    private static string FormatStatus(
+        VerificationStatus status)
+    {
+        return status switch
+        {
+            VerificationStatus.Pass =>
+                "PASS",
+
+            VerificationStatus.Review =>
+                "NEEDS REVIEW",
+
+            VerificationStatus.Fail =>
+                "FAIL",
+
+            _ =>
+                status.ToString().ToUpperInvariant()
+        };
+    }
+
+    private static string GetBadgeClass(
+        VerificationStatus status)
+    {
+        return status switch
+        {
+            VerificationStatus.Pass =>
+                "text-bg-success",
+
+            VerificationStatus.Review =>
+                "text-bg-warning",
+
+            VerificationStatus.Fail =>
+                "text-bg-danger",
+
+            _ =>
+                "text-bg-secondary"
+        };
+    }
+
+    private static string GetBorderClass(
+        VerificationStatus status)
+    {
+        return status switch
+        {
+            VerificationStatus.Pass =>
+                "border-success",
+
+            VerificationStatus.Review =>
+                "border-warning",
+
+            VerificationStatus.Fail =>
+                "border-danger",
+
+            _ =>
+                "border-secondary"
+        };
+    }
+}
