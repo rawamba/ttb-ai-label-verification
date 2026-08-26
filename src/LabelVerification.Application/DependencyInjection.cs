@@ -1,6 +1,7 @@
 ﻿using LabelVerification.Application.LabelIngestion;
 using LabelVerification.Application.LabelUnderstanding;
 using Microsoft.Extensions.DependencyInjection;
+using LabelVerification.Application.Verification.Normalization;
 
 namespace LabelVerification.Application;
 
@@ -27,6 +28,9 @@ public static class DependencyInjection
             LabelImageValidator>();
 
         services.AddSingleton<ILabelFieldParser, LabelFieldParser>();
+        // Text normalization is stateless and safe to share for the lifetime
+        // of the application.
+        services.AddSingleton<ITextNormalizer, TextNormalizer>();
 
         return services;
     }

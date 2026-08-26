@@ -74,7 +74,9 @@ stages:
         --no-build
         --logger "trx"
         --results-directory "$(Agent.TempDirectory)/TestResults"
-      displayName: Run automated tests
+      displayName: Run deterministic automated tests
+      env:
+        RUN_LIVE_OCR_TESTS: "false"
 
     # Preserve test evidence even when a test fails.
     - task: PublishTestResults@2
