@@ -2,6 +2,10 @@
 using LabelVerification.Infrastructure.ApplicationRecords;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Azure.AI.DocumentIntelligence;
+using Azure.Identity;
+using LabelVerification.Application.LabelUnderstanding;
+using LabelVerification.Infrastructure.LabelUnderstanding;
 
 namespace LabelVerification.Infrastructure;
 
@@ -31,6 +35,47 @@ public static class DependencyInjection
 
         services.AddSingleton<IApplicationRecordProvider>(
             _ => new JsonApplicationRecordProvider(applicationDataDirectory));
+
+        // Configure Azure Document Intelligence as the primary OCR provider.
+        //
+        // DefaultAzureCredential allows local development to use the developer's
+        // Azure CLI/IDE identity while Azure App Service can use its managed identity.
+        // No Cognitive Services access key is stored in application configuration.
+        var documentIntelligenceSection =
+            configuration.GetSection(DocumentIntelligenceOptions.SectionName);
+
+        var endpointValue =
+            documentIntelligenceSection["Endpoint"];
+
+        if (string.IsNullOrWhiteSpace(endpointValue))
+        {
+            throw new InvalidOperationException(
+                "Document Intelligence endpoint configuration is missing.");
+        }
+
+        var documentIntelligenceOptions =
+            new DocumentIntelligenceOptions
+            {
+                Endpoint = new Uri(endpointValue),
+                ModelId =
+                    documentIntelligenceSection["ModelId"]
+                    ?? "prebuilt-read",
+                Timeout =
+                    TimeSpan.FromSeconds(
+                        documentIntelligenceSection.GetValue<int?>("TimeoutSeconds")
+                        ?? 5)
+            };
+
+        services.AddSingleton(documentIntelligenceOptions);
+
+        services.AddSingleton(
+            new DocumentIntelligenceClient(
+                documentIntelligenceOptions.Endpoint,
+                new DefaultAzureCredential()));
+
+        services.AddSingleton<
+            ILabelTextExtractor,
+            DocumentIntelligenceLabelTextExtractor>();
 
         return services;
     }

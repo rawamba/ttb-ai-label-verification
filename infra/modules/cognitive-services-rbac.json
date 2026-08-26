@@ -1,0 +1,41 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.46.1.21595",
+      "templateHash": "13583113630766032031"
+    }
+  },
+  "parameters": {
+    "cognitiveServicesAccountName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the Cognitive Services account receiving the role assignment."
+      }
+    },
+    "principalId": {
+      "type": "string",
+      "metadata": {
+        "description": "Microsoft Entra principal ID of the Web App managed identity."
+      }
+    }
+  },
+  "variables": {
+    "cognitiveServicesUserRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a97b65f3-24c7-4388-baec-2e87135dc908')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('cognitiveServicesAccountName'))]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('cognitiveServicesAccountName')), parameters('principalId'), variables('cognitiveServicesUserRoleDefinitionId'))]",
+      "properties": {
+        "roleDefinitionId": "[variables('cognitiveServicesUserRoleDefinitionId')]",
+        "principalId": "[parameters('principalId')]",
+        "principalType": "ServicePrincipal"
+      }
+    }
+  ]
+}

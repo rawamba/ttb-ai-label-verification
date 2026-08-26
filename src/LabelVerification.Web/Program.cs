@@ -1,7 +1,10 @@
 using LabelVerification.Application;
 using LabelVerification.Infrastructure;
 using LabelVerification.Web.Components;
+using LabelVerification.Web.Health;
 using LabelVerification.Web.Middleware;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,13 +14,30 @@ builder.Services
     .AddApplication()
     .AddInfrastructure(builder.Configuration);
 
+// Register the HTTP client used by the Document Intelligence readiness probe.
+// The readiness check verifies dependency reachability without performing
+// a full OCR inference or consuming model quota.
+builder.Services.AddHttpClient("DocumentIntelligenceHealth");
+
+// Register application liveness and dependency-readiness health checks.
+builder.Services
+    .AddHealthChecks()
+
+    // Liveness answers only whether this application process is healthy.
+    .AddCheck(
+        "self",
+        () => HealthCheckResult.Healthy(),
+        tags: ["live"])
+
+    // Readiness additionally verifies that the external OCR dependency
+    // is configured and reachable.
+    .AddCheck<DocumentIntelligenceReadinessHealthCheck>(
+        "document-intelligence",
+        tags: ["ready"]);
+
 // Register Blazor components and enable interactive server rendering.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
-
-// Register a lightweight health check endpoint so deployment automation and
-// operators can verify that the application host is running successfully.
-builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
@@ -42,8 +62,29 @@ app.UseAntiforgery();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-// Expose a platform-neutral endpoint for deployment smoke tests and
-// operational availability checks.
-app.MapHealthChecks("/health");
+// Liveness probe.
+//
+// Used by deployment automation and monitoring to determine whether the
+// application process itself is running. External AI dependencies are
+// intentionally excluded from this probe.
+app.MapHealthChecks(
+    "/health",
+    new HealthCheckOptions
+    {
+        Predicate = registration =>
+            registration.Tags.Contains("live")
+    });
+
+// Readiness probe.
+//
+// Determines whether the application is ready to process label-verification
+// requests, including availability of required external OCR dependencies.
+app.MapHealthChecks(
+    "/health/ready",
+    new HealthCheckOptions
+    {
+        Predicate = registration =>
+            registration.Tags.Contains("ready")
+    });
 
 app.Run();

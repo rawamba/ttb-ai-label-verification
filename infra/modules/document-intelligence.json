@@ -1,0 +1,73 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.46.1.21595",
+      "templateHash": "17806193424605650999"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure region for the Document Intelligence resource."
+      }
+    },
+    "accountName": {
+      "type": "string",
+      "metadata": {
+        "description": "Globally unique Document Intelligence resource name."
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Resource tags."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2024-10-01",
+      "name": "[parameters('accountName')]",
+      "location": "[parameters('location')]",
+      "kind": "FormRecognizer",
+      "tags": "[parameters('tags')]",
+      "sku": {
+        "name": "S0"
+      },
+      "properties": {
+        "customSubDomainName": "[parameters('accountName')]",
+        "disableLocalAuth": true,
+        "publicNetworkAccess": "Enabled"
+      }
+    }
+  ],
+  "outputs": {
+    "accountName": {
+      "type": "string",
+      "metadata": {
+        "description": "Document Intelligence resource name."
+      },
+      "value": "[parameters('accountName')]"
+    },
+    "accountId": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure resource ID of the Document Intelligence account."
+      },
+      "value": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName'))]"
+    },
+    "endpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "Custom-subdomain endpoint used by the application."
+      },
+      "value": "[format('https://{0}.cognitiveservices.azure.com/', parameters('accountName'))]"
+    }
+  }
+}
