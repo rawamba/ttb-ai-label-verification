@@ -1,0 +1,116 @@
+{
+    "schemaVersion":  1,
+    "applicationId":  "COLA-84729",
+    "applicationExpectedData":  {
+                                    "brandName":  "Old Tom Distillery",
+                                    "classType":  "Kentucky Straight Bourbon Whiskey",
+                                    "alcoholByVolume":  45,
+                                    "proof":  90,
+                                    "netContents":  {
+                                                        "value":  750,
+                                                        "unit":  "mL"
+                                                    }
+                                },
+    "notes":  [
+                  "Fixtures are synthetic and contain no production or applicant data.",
+                  "Semantic fixtures mutate one field at a time so verifier behavior can be isolated.",
+                  "Class/type is rendered on every label but is not yet part of the current automated verification aggregate.",
+                  "Rotated and degraded samples are OCR robustness fixtures; their exact field status is validated separately during integration testing."
+              ],
+    "samples":  [
+                    {
+                        "file":  "compliant-label.png",
+                        "purpose":  "Baseline label matching the mock application.",
+                        "intendedOverallStatus":  "PASS",
+                        "intendedChecks":  {
+                                               "brand":  "PASS",
+                                               "abv":  "PASS",
+                                               "proof":  "PASS",
+                                               "netContents":  "PASS",
+                                               "governmentWarning":  "PASS"
+                                           }
+                    },
+                    {
+                        "file":  "brand-variation-label.png",
+                        "purpose":  "One-character brand variation intended to fall into the REVIEW similarity band.",
+                        "intendedOverallStatus":  "REVIEW",
+                        "intendedChecks":  {
+                                               "brand":  "REVIEW",
+                                               "abv":  "PASS",
+                                               "proof":  "PASS",
+                                               "netContents":  "PASS",
+                                               "governmentWarning":  "PASS"
+                                           }
+                    },
+                    {
+                        "file":  "incorrect-abv-label.png",
+                        "purpose":  "ABV differs from the approved application.",
+                        "intendedOverallStatus":  "FAIL",
+                        "intendedChecks":  {
+                                               "brand":  "PASS",
+                                               "abv":  "FAIL",
+                                               "proof":  "PASS",
+                                               "netContents":  "PASS",
+                                               "governmentWarning":  "PASS"
+                                           }
+                    },
+                    {
+                        "file":  "incorrect-proof-label.png",
+                        "purpose":  "Proof differs from the approved application.",
+                        "intendedOverallStatus":  "FAIL",
+                        "intendedChecks":  {
+                                               "brand":  "PASS",
+                                               "abv":  "PASS",
+                                               "proof":  "FAIL",
+                                               "netContents":  "PASS",
+                                               "governmentWarning":  "PASS"
+                                           }
+                    },
+                    {
+                        "file":  "incorrect-net-contents-label.png",
+                        "purpose":  "Net contents differ from the approved application.",
+                        "intendedOverallStatus":  "FAIL",
+                        "intendedChecks":  {
+                                               "brand":  "PASS",
+                                               "abv":  "PASS",
+                                               "proof":  "PASS",
+                                               "netContents":  "FAIL",
+                                               "governmentWarning":  "PASS"
+                                           }
+                    },
+                    {
+                        "file":  "missing-warning-label.png",
+                        "purpose":  "Government Warning is absent.",
+                        "intendedOverallStatus":  "REVIEW",
+                        "intendedChecks":  {
+                                               "brand":  "PASS",
+                                               "abv":  "PASS",
+                                               "proof":  "PASS",
+                                               "netContents":  "PASS",
+                                               "governmentWarning":  "REVIEW"
+                                           }
+                    },
+                    {
+                        "file":  "modified-warning-label.png",
+                        "purpose":  "Government Warning contains a deliberate wording change.",
+                        "intendedOverallStatus":  "FAIL",
+                        "intendedChecks":  {
+                                               "brand":  "PASS",
+                                               "abv":  "PASS",
+                                               "proof":  "PASS",
+                                               "netContents":  "PASS",
+                                               "governmentWarning":  "FAIL"
+                                           }
+                    },
+                    {
+                        "file":  "rotated-label.png",
+                        "purpose":  "Baseline compliant content rotated six degrees to exercise OCR robustness.",
+                        "intendedOverallStatus":  "TO_BE_VALIDATED"
+                    },
+                    {
+                        "file":  "degraded-label.jpg",
+                        "purpose":  "Baseline compliant content with lower resolution, compression, lower light, and glare.",
+                        "intendedOverallStatus":  "TO_BE_VALIDATED"
+                    }
+                ]
+}
