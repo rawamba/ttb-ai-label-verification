@@ -7,6 +7,7 @@
 @using LabelVerification.Application.LabelUnderstanding
 @using LabelVerification.Application.Verification
 @using LabelVerification.Application.Verification.Workflow
+@using LabelVerification.Web.Components.Verification
 
 @inject ILabelVerificationService LabelVerificationService
 @inject ILogger<Home> Logger
@@ -23,8 +24,8 @@
                 </h1>
 
                 <p class="text-secondary mb-0">
-                    Select an application, upload a label image, and run
-                    AI-assisted verification against the expected application data.
+                    Select an application, upload a label image, and compare
+                    extracted label evidence with the expected application data.
                 </p>
             </header>
 
@@ -52,6 +53,7 @@
                                     @application.DisplayName
                                 </option>
                             }
+
                         </select>
 
                         <div class="form-text">
@@ -119,12 +121,17 @@
                                       aria-hidden="true">
                                 </span>
 
-                                <span>Verifying...</span>
+                                <span>
+                                    Verifying...
+                                </span>
                             }
                             else
                             {
-                                <span>Verify label</span>
+                                <span>
+                                    Verify label
+                                </span>
                             }
+
                         </button>
 
                         @if (_selectedFile is not null &&
@@ -161,51 +168,86 @@
                          _submissionResult.ProcessingSucceeded &&
                          _submissionResult.Verification is not null)
                     {
-                        <div class="alert @GetStatusAlertClass(_submissionResult.Verification.OverallStatus) mt-4 mb-0"
-                             role="status">
+                        var verification =
+                            _submissionResult.Verification;
+
+                        <div class="@GetOverallResultCss(
+                                        verification.OverallStatus)"
+                             role="status"
+                             aria-live="polite">
 
                             <div class="fw-semibold">
-                                Verification completed:
-                                @_submissionResult.Verification.OverallStatus
+                                Automated verification status:
+                                @FormatStatus(
+                                    verification.OverallStatus)
                             </div>
 
                             <div class="mt-1">
-                                @_submissionResult.Verification.PassCount passed,
-                                @_submissionResult.Verification.ReviewCount require review,
-                                @_submissionResult.Verification.FailCount failed.
+                                @verification.PassCount passed,
+                                @verification.ReviewCount review,
+                                @verification.FailCount failed.
                             </div>
 
                             @if (_elapsedTime is not null)
                             {
                                 <div class="mt-2 small">
+
                                     <span class="fw-semibold">
                                         Completed in:
                                     </span>
 
-                                    @FormatDuration(_elapsedTime.Value)
+                                    @FormatDuration(
+                                        _elapsedTime.Value)
 
                                     @if (_submissionResult.OcrResult is not null)
                                     {
                                         <span class="ms-3">
+
                                             <span class="fw-semibold">
                                                 OCR:
                                             </span>
 
                                             @FormatDuration(
                                                 _submissionResult.OcrResult.Duration)
+
                                         </span>
                                     }
+
+                                </div>
+                            }
+
+                            @if (verification.OverallStatus ==
+                                 VerificationStatus.Review)
+                            {
+                                <div class="mt-3 small">
+                                    One or more fields contain ambiguous or
+                                    insufficient evidence. Review the flagged
+                                    fields below before making the final
+                                    compliance determination.
                                 </div>
                             }
                         </div>
+
+                        <VerificationCheckList
+                            Verification="verification" />
                     }
 
                 </div>
             </div>
 
-            <div class="mt-3 text-secondary small">
-                AI is used to extract label evidence. Deterministic rules perform
-                objective comparisons, and ambiguous evidence is routed to human review.
+            <div class="border rounded bg-body-tertiary p-3 mt-3 small">
+
+                <div class="fw-semibold mb-1">
+                    Human decision authority
+                </div>
+
+                <div class="text-secondary">
+                    OCR and AI-assisted extraction provide evidence for review.
+                    Deterministic rules perform objective comparisons.
+                    These automated statuses are decision-support results and
+                    do not replace the compliance agent's final determination.
+                </div>
+
             </div>
 
         </div>
@@ -213,9 +255,15 @@
 </div>
 
 @code {
+    // Browser-side upload limit mirrors the Application-layer ingestion policy.
+    // Application validation remains authoritative for content type, signature,
+    // file size, and other deterministic checks.
     private const long MaxUploadBytes =
         10L * 1024L * 1024L;
 
+    // The prototype currently exposes a known mock COLA application.
+    // A production implementation can replace this list with upstream
+    // COLA-backed search or application lookup.
     private static readonly IReadOnlyList<ApplicationOption>
         ApplicationOptions =
         [
@@ -233,8 +281,9 @@
 
     private string? _validationError;
 
-    // Captures the user-perceived end-to-end verification duration.
-    // Detailed stage timing will be added later by pipeline instrumentation.
+    // Captures the user-perceived end-to-end processing duration.
+    // Formal stage-level timing belongs to the instrumentation and
+    // performance benchmark stories.
     private TimeSpan? _elapsedTime;
 
     private LabelVerificationSubmissionResult?
@@ -255,7 +304,8 @@
         _validationError = null;
         _elapsedTime = null;
 
-        var file = args.File;
+        var file =
+            args.File;
 
         if (file.Size <= 0)
         {
@@ -278,7 +328,8 @@
             return;
         }
 
-        _selectedFile = file;
+        _selectedFile =
+            file;
     }
 
     private async Task VerifyAsync()
@@ -311,8 +362,8 @@
 
         _isProcessing = true;
 
-        // Measure the complete user-perceived verification operation,
-        // including application lookup, validation, OCR, parsing,
+        // Measure the complete user-visible workflow:
+        // application lookup, validation, OCR, parsing,
         // deterministic verification, and aggregation.
         var stopwatch =
             Stopwatch.StartNew();
@@ -331,7 +382,8 @@
                     _selectedFile.ContentType,
                     _selectedFile.Size);
 
-            _submissionResult = result;
+            _submissionResult =
+                result;
 
             if (!result.ProcessingSucceeded)
             {
@@ -379,6 +431,8 @@
         }
         catch (Exception exception)
         {
+            // Do not expose Azure implementation details or stack traces
+            // through the user interface. Detailed diagnostics remain in logs.
             Logger.LogError(
                 exception,
                 "Unexpected label verification failure for application {ApplicationId}.",
@@ -406,23 +460,48 @@
         _elapsedTime = null;
     }
 
-    private static string GetStatusAlertClass(
+    private static string FormatStatus(
         VerificationStatus status)
     {
         return status switch
         {
             VerificationStatus.Pass =>
-                "alert-success",
+                "PASS",
 
             VerificationStatus.Review =>
-                "alert-warning",
+                "HUMAN REVIEW REQUIRED",
 
             VerificationStatus.Fail =>
-                "alert-danger",
+                "FAIL",
 
             _ =>
-                "alert-secondary"
+                status
+                    .ToString()
+                    .ToUpperInvariant()
         };
+    }
+
+    private static string GetOverallResultCss(
+        VerificationStatus status)
+    {
+        var alertClass =
+            status switch
+            {
+                VerificationStatus.Pass =>
+                    "alert-success",
+
+                VerificationStatus.Review =>
+                    "alert-warning",
+
+                VerificationStatus.Fail =>
+                    "alert-danger",
+
+                _ =>
+                    "alert-secondary"
+            };
+
+        return
+            $"alert {alertClass} mt-4 mb-0";
     }
 
     private static string FormatDuration(
@@ -437,6 +516,7 @@
         return
             $"{duration.TotalMilliseconds:0} ms";
     }
+
     private static string FormatFileSize(
         long bytes)
     {
@@ -458,7 +538,8 @@
                 $"{bytes / bytesPerKilobyte:0.##} KB";
         }
 
-        return $"{bytes} bytes";
+        return
+            $"{bytes} bytes";
     }
 
     private sealed record ApplicationOption(
