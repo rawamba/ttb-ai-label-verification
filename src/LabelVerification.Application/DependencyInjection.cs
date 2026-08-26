@@ -3,6 +3,7 @@ using LabelVerification.Application.LabelUnderstanding;
 using Microsoft.Extensions.DependencyInjection;
 using LabelVerification.Application.Verification.Normalization;
 using LabelVerification.Application.Verification.Brand;
+using LabelVerification.Application.Verification.Alcohol;
 
 namespace LabelVerification.Application;
 
@@ -42,6 +43,12 @@ public static class DependencyInjection
     });
 
         services.AddSingleton<IBrandNameVerifier, BrandNameVerifier>();
+
+        // Alcohol value verification is stateless and safe to share for the lifetime
+        // No options are needed. These comparisons are deterministic.
+        services.AddSingleton<
+            IAlcoholValueVerifier,
+            AlcoholValueVerifier>();
 
         return services;
     }
