@@ -5,8 +5,9 @@ using LabelVerification.Application.Verification.Brand;
 using LabelVerification.Application.Verification.GovernmentWarning;
 using LabelVerification.Application.Verification.NetContents;
 using LabelVerification.Application.Verification.Normalization;
+using LabelVerification.Application.Verification.Workflow;
+using LabelVerification.Application.Verification;
 using Microsoft.Extensions.DependencyInjection;
-using LabelVerification.Application.Verification.GovernmentWarning;
 
 namespace LabelVerification.Application;
 
@@ -73,6 +74,18 @@ public static class DependencyInjection
         services.AddSingleton<
             IGovernmentWarningVerifier,
             GovernmentWarningVerifier>();
+
+        // Coordinate the end-to-end application verification use case while
+        // keeping Web components independent of individual OCR and rule services.
+        services.AddTransient<
+            ILabelVerificationService,
+            LabelVerificationService>();
+
+        // Aggregate field-level PASS / REVIEW / FAIL checks into the overall
+        // deterministic verification result.
+        services.AddSingleton<
+            IVerificationResultAggregator,
+            VerificationResultAggregator>();
 
         return services;
     }
