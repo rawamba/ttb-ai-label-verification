@@ -15,7 +15,8 @@
                   "Fixtures are synthetic and contain no production or applicant data.",
                   "Semantic fixtures mutate one field at a time so verifier behavior can be isolated.",
                   "Class/type is rendered on every label but is not yet part of the current automated verification aggregate.",
-                  "Rotated and degraded samples are OCR robustness fixtures; their exact field status is validated separately during integration testing."
+                  "Rotated and degraded samples are OCR robustness fixtures; their exact field status is validated separately during integration testing.",
+                  "Supplemental alternate-layout, glare, and poor-light samples are included for OCR robustness evaluation; their exact automated outcomes are recorded after live validation."
               ],
     "samples":  [
                     {
@@ -110,6 +111,21 @@
                     {
                         "file":  "degraded-label.jpg",
                         "purpose":  "Baseline compliant content with lower resolution, compression, lower light, and glare.",
+                        "intendedOverallStatus":  "TO_BE_VALIDATED"
+                    },
+                    {
+                        "file":  "compliant2.jpg",
+                        "purpose":  "Alternate compliant label presentation used to exercise OCR and parsing against a different visual layout.",
+                        "intendedOverallStatus":  "TO_BE_VALIDATED"
+                    },
+                    {
+                        "file":  "compliant-with-glare.jpg",
+                        "purpose":  "Compliant label photographed with glare to exercise OCR robustness under reflective lighting conditions.",
+                        "intendedOverallStatus":  "TO_BE_VALIDATED"
+                    },
+                    {
+                        "file":  "compliant-with-poor-light.jpg",
+                        "purpose":  "Compliant label photographed under poor lighting to exercise OCR robustness under low-light conditions.",
                         "intendedOverallStatus":  "TO_BE_VALIDATED"
                     }
                 ]
