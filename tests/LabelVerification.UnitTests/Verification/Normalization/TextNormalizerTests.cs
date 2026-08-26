@@ -69,7 +69,7 @@ public sealed class TextNormalizerTests
 
         var observed =
             _normalizer.NormalizeForComparison(
-                "Stone’s Throw");
+                "Stone\u2019s Throw");
 
         Assert.Equal(
             expected,
@@ -89,15 +89,18 @@ public sealed class TextNormalizerTests
 
         var enDash =
             _normalizer.NormalizeForComparison(
-                "SMALL–BATCH");
+                "SMALL\u2013BATCH");
 
         var emDash =
             _normalizer.NormalizeForComparison(
-                "SMALL—BATCH");
+                "SMALL\u2014BATCH");
 
         Assert.Equal(hyphen, enDash);
         Assert.Equal(hyphen, emDash);
-        Assert.Equal("small-batch", hyphen);
+
+        Assert.Equal(
+            "small-batch",
+            hyphen);
     }
 
     [Fact]
@@ -115,11 +118,12 @@ public sealed class TextNormalizerTests
     [Fact]
     public void NormalizeForComparison_NormalizesCompatibilityCharacters()
     {
-        // Unicode full-width Latin characters should compare with their
-        // ordinary ASCII representation after FormKC normalization.
+        // Full-width Unicode Latin characters should normalize to their
+        // ordinary ASCII equivalents through Unicode FormKC normalization.
         var result =
             _normalizer.NormalizeForComparison(
-                "GOLDEN ALE");
+                "\uFF27\uFF2F\uFF2C\uFF24\uFF25\uFF2E " +
+                "\uFF21\uFF2C\uFF25");
 
         Assert.Equal(
             "golden ale",
@@ -143,10 +147,10 @@ public sealed class TextNormalizerTests
     {
         var result =
             _normalizer.NormalizeForComparison(
-                "Cuvée Réserve");
+                "Cuv\u00E9e R\u00E9serve");
 
         Assert.Equal(
-            "cuvée réserve",
+            "cuv\u00E9e r\u00E9serve",
             result);
     }
 
@@ -155,7 +159,7 @@ public sealed class TextNormalizerTests
     {
         var first =
             _normalizer.NormalizeForComparison(
-                "  Stone’s   Throw  ");
+                "  Stone\u2019s   Throw  ");
 
         var second =
             _normalizer.NormalizeForComparison(
@@ -164,5 +168,9 @@ public sealed class TextNormalizerTests
         Assert.Equal(
             first,
             second);
+
+        Assert.Equal(
+            "stone's throw",
+            first);
     }
 }
