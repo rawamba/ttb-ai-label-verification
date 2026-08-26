@@ -1,11 +1,12 @@
-﻿using LabelVerification.Application.Abstractions;
+﻿using Azure.AI.DocumentIntelligence;
+using Azure.Identity;
+using LabelVerification.Application.Abstractions;
+using LabelVerification.Application.LabelUnderstanding;
 using LabelVerification.Infrastructure.ApplicationRecords;
+using LabelVerification.Infrastructure.LabelUnderstanding;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Azure.AI.DocumentIntelligence;
-using Azure.Identity;
-using LabelVerification.Application.LabelUnderstanding;
-using LabelVerification.Infrastructure.LabelUnderstanding;
+using static System.Collections.Specialized.BitVector32;
 
 namespace LabelVerification.Infrastructure;
 
@@ -63,7 +64,9 @@ public static class DependencyInjection
                 Timeout =
                     TimeSpan.FromSeconds(
                         documentIntelligenceSection.GetValue<int?>("TimeoutSeconds")
-                        ?? 5)
+                        ?? 5),
+                EnableFontStyling =
+        documentIntelligenceSection.GetValue<bool?>("EnableFontStyling") ?? true
             };
 
         services.AddSingleton(documentIntelligenceOptions);

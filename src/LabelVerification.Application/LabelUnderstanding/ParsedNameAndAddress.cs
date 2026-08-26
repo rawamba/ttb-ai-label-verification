@@ -4,8 +4,9 @@ namespace LabelVerification.Application.LabelUnderstanding;
 /// Represents producer, bottler, importer, or other name-and-address
 /// information observed on the label.
 ///
-/// RawText is retained because address interpretation can be ambiguous,
-/// and the original evidence must remain available for human review.
+/// RawText is always retained because OCR layout and address interpretation
+/// can be ambiguous. Structured components are populated only when they can
+/// be identified conservatively from the observed evidence.
 /// </summary>
 public sealed record ParsedNameAndAddress
 {
@@ -13,9 +14,13 @@ public sealed record ParsedNameAndAddress
 
     public string? BusinessName { get; init; }
 
+    public string? StreetAddress { get; init; }
+
     public string? City { get; init; }
 
     public string? State { get; init; }
+
+    public string? PostalCode { get; init; }
 
     public string? Country { get; init; }
 }

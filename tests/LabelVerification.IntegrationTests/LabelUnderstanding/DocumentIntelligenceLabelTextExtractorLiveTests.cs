@@ -297,6 +297,26 @@ public sealed class DocumentIntelligenceLabelTextExtractorLiveTests
             _output.WriteLine(
                 $"{word.Confidence:P2}  {word.Text}");
         }
+        // Font style evidence is not always returned, so this section is optional.
+        _output.WriteLine("");
+        _output.WriteLine("Detected font-weight evidence:");
+        _output.WriteLine("------------------------------");
+
+        if (result.Styles.Count == 0)
+        {
+            _output.WriteLine("No font-style evidence returned.");
+        }
+        else
+        {
+            foreach (var style in result.Styles
+                         .OrderBy(style => style.Offset))
+            {
+                _output.WriteLine(
+                    $"{style.FontWeight,-7} " +
+                    $"{style.Confidence,7:P2}  " +
+                    $"{style.Text}");
+            }
+        }
 
         _output.WriteLine("==========================");
     }

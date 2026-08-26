@@ -1,4 +1,5 @@
 ﻿using LabelVerification.Application.LabelIngestion;
+using LabelVerification.Application.LabelUnderstanding;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace LabelVerification.Application;
@@ -24,6 +25,8 @@ public static class DependencyInjection
         services.AddSingleton<
             ILabelImageValidator,
             LabelImageValidator>();
+
+        services.AddSingleton<ILabelFieldParser, LabelFieldParser>();
 
         return services;
     }
