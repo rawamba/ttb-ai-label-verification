@@ -1,9 +1,10 @@
-﻿using LabelVerification.Application.LabelIngestion;
+using LabelVerification.Application.LabelIngestion;
 using LabelVerification.Application.LabelUnderstanding;
-using Microsoft.Extensions.DependencyInjection;
-using LabelVerification.Application.Verification.Normalization;
-using LabelVerification.Application.Verification.Brand;
 using LabelVerification.Application.Verification.Alcohol;
+using LabelVerification.Application.Verification.Brand;
+using LabelVerification.Application.Verification.NetContents;
+using LabelVerification.Application.Verification.Normalization;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace LabelVerification.Application;
 
@@ -49,6 +50,14 @@ public static class DependencyInjection
         services.AddSingleton<
             IAlcoholValueVerifier,
             AlcoholValueVerifier>();
+
+        services.AddSingleton<
+     INetContentsNormalizer,
+     NetContentsNormalizer>();
+
+        services.AddSingleton<
+            INetContentsVerifier,
+            NetContentsVerifier>();
 
         return services;
     }
