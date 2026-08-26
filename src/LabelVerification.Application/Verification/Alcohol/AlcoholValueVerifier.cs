@@ -67,7 +67,7 @@ public sealed class AlcoholValueVerifier : IAlcoholValueVerifier
 
     /// <inheritdoc />
     public VerificationCheckResult VerifyProof(
-        int? expectedProof,
+        decimal? expectedProof,
         ParsedLabelField<int>? observedProof)
     {
         if (expectedProof is null)
@@ -145,7 +145,7 @@ public sealed class AlcoholValueVerifier : IAlcoholValueVerifier
 
     private static VerificationCheckResult CreateProofResult(
         VerificationStatus status,
-        int? expected,
+        decimal? expected,
         ParsedLabelField<int>? observed,
         string explanation)
     {

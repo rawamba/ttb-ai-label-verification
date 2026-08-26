@@ -12,6 +12,6 @@ public interface IAlcoholValueVerifier
         ParsedLabelField<decimal>? observedAlcoholByVolume);
 
     VerificationCheckResult VerifyProof(
-        int? expectedProof,
+        decimal? expectedProof,
         ParsedLabelField<int>? observedProof);
 }

@@ -1,7 +1,467 @@
-﻿@page "/"
+@page "/"
+@rendermode InteractiveServer
 
-<PageTitle>Home</PageTitle>
+@using System.Diagnostics
+@using Microsoft.AspNetCore.Components.Forms
+@using LabelVerification.Application.Exceptions
+@using LabelVerification.Application.LabelUnderstanding
+@using LabelVerification.Application.Verification
+@using LabelVerification.Application.Verification.Workflow
 
-<h1>Hello, world!</h1>
+@inject ILabelVerificationService LabelVerificationService
+@inject ILogger<Home> Logger
 
-Welcome to your new app.
+<PageTitle>Alcohol Label Verification</PageTitle>
+
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-12 col-xl-9">
+
+            <header class="mb-4">
+                <h1 class="h2 mb-2">
+                    Alcohol Label Verification
+                </h1>
+
+                <p class="text-secondary mb-0">
+                    Select an application, upload a label image, and run
+                    AI-assisted verification against the expected application data.
+                </p>
+            </header>
+
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+
+                    <div class="mb-4">
+                        <label for="applicationId"
+                               class="form-label fw-semibold">
+                            1. Application
+                        </label>
+
+                        <select id="applicationId"
+                                class="form-select form-select-lg"
+                                @bind="_selectedApplicationId"
+                                disabled="@_isProcessing">
+
+                            <option value="">
+                                -- Select an application --
+                            </option>
+
+                            @foreach (var application in ApplicationOptions)
+                            {
+                                <option value="@application.Id">
+                                    @application.DisplayName
+                                </option>
+                            }
+                        </select>
+
+                        <div class="form-text">
+                            Prototype application data is supplied by the local
+                            mock COLA adapter. No direct COLA integration is used.
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">
+                            2. Label image
+                        </label>
+
+                        <InputFile OnChange="OnFileSelected"
+                                   accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                                   class="form-control form-control-lg"
+                                   disabled="@_isProcessing" />
+
+                        <div class="form-text">
+                            Supported formats: JPEG, PNG, and WebP.
+                            Maximum upload size: 10 MB.
+                        </div>
+
+                        @if (_selectedFile is not null)
+                        {
+                            <div class="mt-2 small">
+                                <span class="fw-semibold">
+                                    Selected:
+                                </span>
+
+                                @_selectedFile.Name
+
+                                <span class="text-secondary">
+                                    (@FormatFileSize(_selectedFile.Size))
+                                </span>
+                            </div>
+                        }
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(_validationError))
+                    {
+                        <div class="alert alert-danger"
+                             role="alert">
+
+                            <strong>
+                                Unable to verify this label.
+                            </strong>
+
+                            <div class="mt-1">
+                                @_validationError
+                            </div>
+                        </div>
+                    }
+
+                    <div class="d-grid d-sm-flex gap-2">
+
+                        <button type="button"
+                                class="btn btn-primary btn-lg px-4"
+                                disabled="@(!CanVerify)"
+                                @onclick="VerifyAsync">
+
+                            @if (_isProcessing)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"
+                                      aria-hidden="true">
+                                </span>
+
+                                <span>Verifying...</span>
+                            }
+                            else
+                            {
+                                <span>Verify label</span>
+                            }
+                        </button>
+
+                        @if (_selectedFile is not null &&
+                             !_isProcessing)
+                        {
+                            <button type="button"
+                                    class="btn btn-outline-secondary btn-lg"
+                                    @onclick="ClearSelection">
+                                Clear
+                            </button>
+                        }
+
+                    </div>
+
+                    @if (_isProcessing)
+                    {
+                        <div class="alert alert-info mt-4 mb-0"
+                             role="status"
+                             aria-live="polite">
+
+                            <div class="fw-semibold">
+                                Processing label
+                            </div>
+
+                            <div>
+                                The image is being validated, read by OCR,
+                                parsed, and compared with the application.
+                                This normally takes a few seconds.
+                            </div>
+                        </div>
+                    }
+
+                    @if (_submissionResult is not null &&
+                         _submissionResult.ProcessingSucceeded &&
+                         _submissionResult.Verification is not null)
+                    {
+                        <div class="alert @GetStatusAlertClass(_submissionResult.Verification.OverallStatus) mt-4 mb-0"
+                             role="status">
+
+                            <div class="fw-semibold">
+                                Verification completed:
+                                @_submissionResult.Verification.OverallStatus
+                            </div>
+
+                            <div class="mt-1">
+                                @_submissionResult.Verification.PassCount passed,
+                                @_submissionResult.Verification.ReviewCount require review,
+                                @_submissionResult.Verification.FailCount failed.
+                            </div>
+
+                            @if (_elapsedTime is not null)
+                            {
+                                <div class="mt-2 small">
+                                    <span class="fw-semibold">
+                                        Completed in:
+                                    </span>
+
+                                    @FormatDuration(_elapsedTime.Value)
+
+                                    @if (_submissionResult.OcrResult is not null)
+                                    {
+                                        <span class="ms-3">
+                                            <span class="fw-semibold">
+                                                OCR:
+                                            </span>
+
+                                            @FormatDuration(
+                                                _submissionResult.OcrResult.Duration)
+                                        </span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+
+                </div>
+            </div>
+
+            <div class="mt-3 text-secondary small">
+                AI is used to extract label evidence. Deterministic rules perform
+                objective comparisons, and ambiguous evidence is routed to human review.
+            </div>
+
+        </div>
+    </div>
+</div>
+
+@code {
+    private const long MaxUploadBytes =
+        10L * 1024L * 1024L;
+
+    private static readonly IReadOnlyList<ApplicationOption>
+        ApplicationOptions =
+        [
+            new(
+                "COLA-84729",
+                "COLA-84729")
+        ];
+
+    private string _selectedApplicationId =
+        string.Empty;
+
+    private IBrowserFile? _selectedFile;
+
+    private bool _isProcessing;
+
+    private string? _validationError;
+
+    // Captures the user-perceived end-to-end verification duration.
+    // Detailed stage timing will be added later by pipeline instrumentation.
+    private TimeSpan? _elapsedTime;
+
+    private LabelVerificationSubmissionResult?
+        _submissionResult;
+
+    private bool CanVerify =>
+        !_isProcessing &&
+        !string.IsNullOrWhiteSpace(
+            _selectedApplicationId) &&
+        _selectedFile is not null &&
+        string.IsNullOrWhiteSpace(
+            _validationError);
+
+    private void OnFileSelected(
+        InputFileChangeEventArgs args)
+    {
+        _submissionResult = null;
+        _validationError = null;
+        _elapsedTime = null;
+
+        var file = args.File;
+
+        if (file.Size <= 0)
+        {
+            _selectedFile = null;
+
+            _validationError =
+                "The selected file is empty.";
+
+            return;
+        }
+
+        if (file.Size > MaxUploadBytes)
+        {
+            _selectedFile = null;
+
+            _validationError =
+                $"The selected file is too large. " +
+                $"Maximum size is {FormatFileSize(MaxUploadBytes)}.";
+
+            return;
+        }
+
+        _selectedFile = file;
+    }
+
+    private async Task VerifyAsync()
+    {
+        if (_isProcessing)
+        {
+            return;
+        }
+
+        _submissionResult = null;
+        _validationError = null;
+        _elapsedTime = null;
+
+        if (string.IsNullOrWhiteSpace(
+                _selectedApplicationId))
+        {
+            _validationError =
+                "Select an application before verification.";
+
+            return;
+        }
+
+        if (_selectedFile is null)
+        {
+            _validationError =
+                "Select a label image before verification.";
+
+            return;
+        }
+
+        _isProcessing = true;
+
+        // Measure the complete user-perceived verification operation,
+        // including application lookup, validation, OCR, parsing,
+        // deterministic verification, and aggregation.
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        try
+        {
+            await using var image =
+                _selectedFile.OpenReadStream(
+                    MaxUploadBytes);
+
+            var result =
+                await LabelVerificationService.VerifyAsync(
+                    _selectedApplicationId,
+                    image,
+                    _selectedFile.Name,
+                    _selectedFile.ContentType,
+                    _selectedFile.Size);
+
+            _submissionResult = result;
+
+            if (!result.ProcessingSucceeded)
+            {
+                _validationError =
+                    result.ErrorMessage ??
+                    "The label could not be processed.";
+            }
+        }
+        catch (LabelTextExtractionException exception)
+        {
+            Logger.LogWarning(
+                exception,
+                "OCR processing failed for application {ApplicationId}.",
+                _selectedApplicationId);
+
+            _validationError =
+                "The label image could not be read by the OCR service. " +
+                "Please try again or use a clearer image.";
+        }
+        catch (InvalidApplicationRecordException exception)
+        {
+            Logger.LogWarning(
+                exception,
+                "Application data was invalid for {ApplicationId}.",
+                _selectedApplicationId);
+
+            _validationError =
+                "The selected application data could not be loaded safely.";
+        }
+        catch (IOException exception)
+        {
+            Logger.LogWarning(
+                exception,
+                "Unable to read uploaded label image {FileName}.",
+                _selectedFile?.Name);
+
+            _validationError =
+                "The selected image could not be read. " +
+                "Please choose the file again.";
+        }
+        catch (OperationCanceledException)
+        {
+            _validationError =
+                "Verification was cancelled before processing completed.";
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(
+                exception,
+                "Unexpected label verification failure for application {ApplicationId}.",
+                _selectedApplicationId);
+
+            _validationError =
+                "Verification could not be completed. Please try again.";
+        }
+        finally
+        {
+            stopwatch.Stop();
+
+            _elapsedTime =
+                stopwatch.Elapsed;
+
+            _isProcessing = false;
+        }
+    }
+
+    private void ClearSelection()
+    {
+        _selectedFile = null;
+        _submissionResult = null;
+        _validationError = null;
+        _elapsedTime = null;
+    }
+
+    private static string GetStatusAlertClass(
+        VerificationStatus status)
+    {
+        return status switch
+        {
+            VerificationStatus.Pass =>
+                "alert-success",
+
+            VerificationStatus.Review =>
+                "alert-warning",
+
+            VerificationStatus.Fail =>
+                "alert-danger",
+
+            _ =>
+                "alert-secondary"
+        };
+    }
+
+    private static string FormatDuration(
+        TimeSpan duration)
+    {
+        if (duration.TotalSeconds >= 1)
+        {
+            return
+                $"{duration.TotalSeconds:0.00} s";
+        }
+
+        return
+            $"{duration.TotalMilliseconds:0} ms";
+    }
+    private static string FormatFileSize(
+        long bytes)
+    {
+        const decimal bytesPerKilobyte =
+            1024m;
+
+        const decimal bytesPerMegabyte =
+            1024m * 1024m;
+
+        if (bytes >= bytesPerMegabyte)
+        {
+            return
+                $"{bytes / bytesPerMegabyte:0.##} MB";
+        }
+
+        if (bytes >= bytesPerKilobyte)
+        {
+            return
+                $"{bytes / bytesPerKilobyte:0.##} KB";
+        }
+
+        return $"{bytes} bytes";
+    }
+
+    private sealed record ApplicationOption(
+        string Id,
+        string DisplayName);
+}
