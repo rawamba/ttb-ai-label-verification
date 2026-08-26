@@ -2,9 +2,11 @@ using LabelVerification.Application.LabelIngestion;
 using LabelVerification.Application.LabelUnderstanding;
 using LabelVerification.Application.Verification.Alcohol;
 using LabelVerification.Application.Verification.Brand;
+using LabelVerification.Application.Verification.GovernmentWarning;
 using LabelVerification.Application.Verification.NetContents;
 using LabelVerification.Application.Verification.Normalization;
 using Microsoft.Extensions.DependencyInjection;
+using LabelVerification.Application.Verification.GovernmentWarning;
 
 namespace LabelVerification.Application;
 
@@ -58,6 +60,19 @@ public static class DependencyInjection
         services.AddSingleton<
             INetContentsVerifier,
             NetContentsVerifier>();
+
+        // Government warning verification is stateless and safe to share for the lifetime
+        services.AddSingleton(
+    new GovernmentWarningVerificationOptions
+    {
+        MinimumOcrConfidence = 0.90,
+        MinimumStyleConfidence = 0.90,
+        RequireBoldHeading = true
+    });
+
+        services.AddSingleton<
+            IGovernmentWarningVerifier,
+            GovernmentWarningVerifier>();
 
         return services;
     }
