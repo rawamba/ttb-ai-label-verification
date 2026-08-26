@@ -2,6 +2,7 @@
 using LabelVerification.Application.LabelUnderstanding;
 using Microsoft.Extensions.DependencyInjection;
 using LabelVerification.Application.Verification.Normalization;
+using LabelVerification.Application.Verification.Brand;
 
 namespace LabelVerification.Application;
 
@@ -31,6 +32,16 @@ public static class DependencyInjection
         // Text normalization is stateless and safe to share for the lifetime
         // of the application.
         services.AddSingleton<ITextNormalizer, TextNormalizer>();
+
+        // Brand name verification is stateless and safe to share for the lifetime
+        services.AddSingleton(
+    new BrandNameVerificationOptions
+    {
+        PassThreshold = 0.95,
+        ReviewThreshold = 0.80
+    });
+
+        services.AddSingleton<IBrandNameVerifier, BrandNameVerifier>();
 
         return services;
     }
