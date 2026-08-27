@@ -34,6 +34,29 @@ The prototype intentionally does **not** connect directly to the production COLA
 
 ---
 
+# Engineering Documentation
+
+Additional engineering documentation is available under [`docs/`](docs/):
+
+| Document | Purpose |
+|---|---|
+| [Application Architecture](docs/architecture.md) | Implemented system architecture, verification pipeline, Azure deployment, security boundaries, telemetry, performance, and known limitations |
+| [Regulatory References](docs/regulatory-references.md) | Regulatory traceability for the bounded distilled-spirits verification rules implemented by the prototype |
+| [Architecture Decision Records](docs/decisions/) | Context, decisions, alternatives, and consequences behind significant engineering choices |
+
+### Architecture Decision Records
+
+| ADR | Decision |
+|---|---|
+| [ADR 0001](docs/decisions/0001-layered-architecture.md) | Use a layered application architecture |
+| [ADR 0002](docs/decisions/0002-hybrid-verification-strategy.md) | Use AI-assisted perception, deterministic verification, and human review |
+| [ADR 0003](docs/decisions/0003-cola-adapter-boundary.md) | Treat COLA as an upstream system behind an adapter boundary |
+| [ADR 0004](docs/decisions/0004-azure-document-intelligence.md) | Use Azure Document Intelligence behind the OCR abstraction |
+| [ADR 0005](docs/decisions/0005-managed-identity-and-rbac.md) | Use Managed Identity and scoped Azure RBAC for OCR access |
+| [ADR 0006](docs/decisions/0006-verification-telemetry.md) | Instrument the verification workflow with non-sensitive stage telemetry |
+
+---
+
 # Evaluator Quick Walkthrough
 
 The fastest way to evaluate the prototype is:
@@ -1047,6 +1070,17 @@ ttb-ai-label-verification/
 |
 +-- benchmark-results/
 |
++-- docs/
+|   +-- architecture.md
+|   +-- regulatory-references.md
+|   +-- decisions/
+|       +-- 0001-layered-architecture.md
+|       +-- 0002-hybrid-verification-strategy.md
+|       +-- 0003-cola-adapter-boundary.md
+|       +-- 0004-azure-document-intelligence.md
+|       +-- 0005-managed-identity-and-rbac.md
+|       +-- 0006-verification-telemetry.md
+|
 +-- infra/
 |
 +-- azure-pipelines.yml
@@ -1181,6 +1215,10 @@ The prototype assumes:
 # Regulatory Scope
 
 The prototype implements a bounded subset of alcohol-label verification behavior informed by TTB labeling requirements.
+
+Detailed regulatory traceability for brand name, class/type, alcohol content, proof, net contents, and the Government Health Warning is documented in:
+
+**[Regulatory References](docs/regulatory-references.md)**
 
 It is not intended to encode every beverage-specific rule or replace official regulatory guidance.
 
