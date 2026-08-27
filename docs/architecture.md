@@ -2,15 +2,23 @@
 
 ## 1. Purpose
 
-This document defines the application architecture for the **AI-Powered Alcohol Label Verification** prototype.
+This document describes the implemented architecture of the **AI-Powered Alcohol Label Verification** prototype.
 
-The prototype assists TTB compliance agents by extracting information from alcohol label images, comparing detected values with expected application data, applying deterministic compliance checks where possible, and presenting explainable **PASS**, **REVIEW**, or **FAIL** results for human review.
+The application assists alcohol-label compliance reviewers by:
 
-The architecture is intentionally designed around the following principle:
+1. accepting a label image;
+2. loading expected application data through an explicit adapter boundary;
+3. extracting visible label evidence with Azure Document Intelligence;
+4. converting OCR output into provider-neutral structured evidence;
+5. applying deterministic field-specific verification rules;
+6. aggregating results into `PASS`, `REVIEW`, or `FAIL`; and
+7. presenting explainable evidence to a human compliance agent.
+
+The central architectural principle is:
 
 > **AI for perception and ambiguity; deterministic rules for objective compliance; human judgment for final compliance decisions.**
 
-The prototype is standalone and does not integrate directly with the existing COLA system.
+The prototype is intentionally standalone and does **not** integrate directly with the production COLA system.
 
 ---
 
@@ -18,117 +26,141 @@ The prototype is standalone and does not integrate directly with the existing CO
 
 The architecture is designed to support:
 
-- Fast verification, with a target user experience of approximately five seconds.
-- Clear separation between business rules, workflow orchestration, external technology, and user-interface concerns.
-- Explainable verification results rather than opaque AI decisions.
-- Human review when OCR confidence or comparison evidence is insufficient.
-- Replacement of prototype integrations without rewriting core verification logic.
-- Future integration with Treasury and TTB systems through explicit adapter boundaries.
-- Testability of regulatory and verification logic independently of OCR providers and the user interface.
-- Deployment to Azure without coupling the business domain to Azure-specific services.
-- Operation in network-constrained environments with minimal reliance on outbound services.
+- an approximately five-second routine verification target;
+- explainable field-level verification results;
+- deterministic handling of objective compliance comparisons;
+- human review when evidence is uncertain or incomplete;
+- independence between regulatory logic and OCR-provider technology;
+- a clean future integration seam for COLA;
+- Azure deployment without embedding service credentials;
+- non-sensitive operational telemetry;
+- deterministic automated testing without requiring live Azure services in normal CI;
+- future production security and network hardening without rewriting the verification engine.
+
+The architecture deliberately separates **perception**, **interpretation**, **verification**, and **final judgment**.
 
 ---
 
-## 3. High-Level Architecture
+## 3. System Context
 
 ```mermaid
 flowchart TD
     Agent["Compliance Agent"]
-    Web["LabelVerification.Web<br/>Blazor UI / Composition Root"]
-    App["LabelVerification.Application<br/>Use Cases / Orchestration / Interfaces"]
-    Domain["LabelVerification.Domain<br/>Business Concepts / Verification Results / Rules"]
-    Infra["LabelVerification.Infrastructure<br/>OCR / JSON Application Data / External Providers"]
+    Browser["Browser"]
+    Web["LabelVerification.Web<br/>Blazor Server / .NET 8"]
+    Workflow["LabelVerificationService"]
+    AppAdapter["IApplicationRecordProvider"]
+    Json["Prototype JSON<br/>Application Record"]
+    Validator["Image Validation"]
+    OCRBoundary["ILabelTextExtractor"]
+    AzureDI["Azure Document Intelligence<br/>prebuilt-read"]
+    Parser["Structured Label Parser"]
+    Rules["Deterministic Verification"]
+    Aggregate["Result Aggregation"]
+    Result["PASS / REVIEW / FAIL"]
+    Human["Human Review"]
 
-    Label["Label Image"]
-    AppData["Prototype Application Record<br/>JSON Fixture"]
-    FutureCOLA["Future COLA Integration"]
+    Agent --> Browser
+    Browser --> Web
+    Web --> Workflow
 
-    Agent --> Web
-    Web --> App
-    App --> Domain
+    Workflow --> AppAdapter
+    AppAdapter --> Json
 
-    Web --> Infra
-    Infra --> App
-    Infra --> Domain
+    Workflow --> Validator
+    Validator --> OCRBoundary
+    OCRBoundary --> AzureDI
+    AzureDI --> Parser
 
-    Label --> Infra
-    AppData --> Infra
-    FutureCOLA -.-> Infra
+    Parser --> Rules
+    AppAdapter --> Rules
+
+    Rules --> Aggregate
+    Aggregate --> Result
+    Result --> Human
+    Human --> Agent
 ```
 
-The Web application acts as the **composition root**. It assembles Application and Infrastructure services using the built-in .NET dependency-injection container.
+The browser does not communicate directly with Azure Document Intelligence.
 
-The important compile-time dependency rule is that Infrastructure may implement interfaces defined by Application, but Application does not reference Infrastructure.
+OCR requests are initiated server-side by the .NET application.
 
 ---
 
-## 4. Layer Responsibilities
+## 4. Solution Structure
 
-### 4.1 LabelVerification.Domain
+The application is implemented as a layered modular monolith.
 
-The **Domain** project contains the core business concepts required to express verification results and compliance-related decisions.
+```text
+src/
+  LabelVerification.Domain/
+  LabelVerification.Application/
+  LabelVerification.Infrastructure/
+  LabelVerification.Web/
 
-Typical responsibilities include:
+tests/
+  LabelVerification.UnitTests/
+  LabelVerification.IntegrationTests/
 
-- Verification status such as `PASS`, `REVIEW`, and `FAIL`.
-- Expected and detected label values.
-- Field-level verification results.
-- Value objects such as alcohol content and net contents.
-- Business concepts that do not depend on UI frameworks, OCR vendors, storage providers, or Azure services.
-- Pure domain rules where appropriate.
+tools/
+  LabelVerification.Benchmarks/
+```
 
-The Domain project should not reference Application, Infrastructure, or Web.
+Supporting assets include:
+
+```text
+sample-data/
+benchmark-results/
+infra/
+docs/
+```
+
+This structure separates core verification behavior from external providers, user-interface concerns, test infrastructure, and deployment resources.
+
+---
+
+## 5. Layer Responsibilities
+
+### 5.1 LabelVerification.Domain
+
+The **Domain** project contains business concepts that should remain independent of:
+
+- ASP.NET Core;
+- Blazor;
+- Azure SDKs;
+- OCR providers;
+- infrastructure configuration;
+- external storage; and
+- COLA implementation details.
+
+The Domain layer represents the concepts required to express expected application data, detected evidence, and verification outcomes.
 
 Conceptually, this layer answers:
 
 > **What does the business problem mean?**
 
-Examples of future Domain types may include:
-
-```text
-VerificationStatus
-FieldVerificationResult
-ExpectedLabelData
-ExtractedLabelData
-AlcoholContent
-NetContents
-```
-
 ---
 
-### 4.2 LabelVerification.Application
+### 5.2 LabelVerification.Application
 
-The **Application** project coordinates the label-verification use cases.
+The **Application** project coordinates the verification use case.
 
-Typical responsibilities include:
+Implemented responsibilities include:
 
-- Verification workflow orchestration.
-- Interfaces for application-data providers.
-- Interfaces for OCR and text-extraction providers.
-- Interfaces for structured field parsing.
-- Brand comparison and normalization workflows.
-- Alcohol-content verification.
-- Net-content verification.
-- Government-warning verification.
-- Aggregation of field results into an overall verification status.
+- end-to-end verification workflow orchestration;
+- OCR-provider abstractions;
+- application-record-provider abstractions;
+- structured label parsing;
+- textual normalization;
+- brand comparison;
+- alcohol-by-volume verification;
+- proof verification;
+- net-contents verification;
+- Government Warning verification;
+- result aggregation;
+- workflow-level performance telemetry.
 
-The Application layer defines **what capabilities are required** while remaining independent of specific external implementations.
-
-For example, the Application layer may define:
-
-```csharp
-public interface ILabelTextExtractor
-{
-    Task<OcrResult> ExtractAsync(
-        Stream image,
-        CancellationToken cancellationToken);
-}
-```
-
-The Application layer does not determine whether the implementation uses a local OCR engine, Azure service, or another provider.
-
-That implementation belongs to Infrastructure.
+The Application layer defines the capabilities required by the workflow while remaining independent of the concrete Azure OCR implementation.
 
 Conceptually, this layer answers:
 
@@ -136,92 +168,68 @@ Conceptually, this layer answers:
 
 ---
 
-### 4.3 LabelVerification.Infrastructure
+### 5.3 LabelVerification.Infrastructure
 
-The **Infrastructure** project contains implementations that interact with external technology or external data sources.
+The **Infrastructure** project implements external technology boundaries.
 
-Typical responsibilities include:
+Current responsibilities include:
 
-- OCR provider implementation.
-- Reading prototype application records from JSON.
-- Image-processing integrations.
-- Configuration binding for provider-specific settings.
-- Future COLA adapters.
-- Future Azure service integrations.
-- External storage implementations.
-- Telemetry and observability adapters.
-- Persistence implementations if required.
+- Azure Document Intelligence OCR;
+- Azure Document Intelligence configuration;
+- credential integration;
+- JSON-backed prototype application data;
+- implementation of Application-layer provider interfaces.
 
-Infrastructure implements interfaces defined by the Application layer.
-
-For example:
+The OCR dependency is structured as:
 
 ```text
-Application:
-    ILabelTextExtractor
-
-Infrastructure:
-    LocalOcrLabelTextExtractor
+Application
+    |
+    v
+ILabelTextExtractor
+    |
+    v
+Infrastructure
+    |
+    v
+DocumentIntelligenceLabelTextExtractor
+    |
+    v
+Azure Document Intelligence
 ```
 
-Similarly:
+The verification workflow therefore does not depend directly on Azure-specific OCR types.
 
-```text
-Application:
-    IApplicationRecordProvider
+Conceptually, Infrastructure answers:
 
-Infrastructure:
-    JsonApplicationRecordProvider
-```
-
-A future implementation could introduce:
-
-```text
-ColaApplicationRecordProvider
-```
-
-without requiring the verification workflow to be rewritten.
-
-Conceptually, this layer answers:
-
-> **How does the system communicate with external technology?**
+> **How does the application communicate with external technology?**
 
 ---
 
-### 4.4 LabelVerification.Web
+### 5.4 LabelVerification.Web
 
-The **Web** project provides the compliance-agent experience and serves as the application composition root.
+The **Web** project provides the compliance-agent experience and acts as the application composition root.
 
-Typical responsibilities include:
+Responsibilities include:
 
-- Blazor pages and components.
-- Label-image upload.
-- Application-record selection.
-- Initiating verification.
-- Displaying field-level expected and detected values.
-- Displaying `PASS`, `REVIEW`, and `FAIL` outcomes.
-- Displaying explanations and confidence information.
-- Presenting ambiguous results for human review.
-- Registering Application and Infrastructure services.
-- Configuring the ASP.NET Core HTTP request pipeline.
+- application-record selection;
+- image upload;
+- initiating verification;
+- displaying field-level evidence;
+- presenting `PASS`, `REVIEW`, and `FAIL`;
+- displaying processing telemetry;
+- supporting the human-review workflow;
+- HTTP request correlation;
+- dependency-injection composition;
+- ASP.NET Core request-pipeline configuration.
 
-Business and regulatory verification logic should not be implemented directly inside Razor components.
+Regulatory comparison logic is intentionally kept out of Razor components.
 
-For example, a Razor component should call an application service:
-
-```csharp
-var result = await verificationService.VerifyAsync(request);
-```
-
-rather than containing detailed comparison or regulatory logic itself.
-
-Conceptually, this layer answers:
-
-> **How does the user interact with the system?**
+The UI invokes Application-layer services instead of implementing verification rules directly.
 
 ---
 
-## 5. Dependency Direction
+## 6. Dependency Direction
 
 The intended compile-time dependency direction is:
 
@@ -241,7 +249,7 @@ Infrastructure
 Web
 ```
 
-Another representation is:
+Equivalent view:
 
 ```mermaid
 flowchart BT
@@ -257,32 +265,24 @@ flowchart BT
     Web --> Infrastructure
 ```
 
-The key constraints are:
+The important constraints are:
 
 - `Domain` remains independent.
 - `Application` may depend on `Domain`.
 - `Infrastructure` may depend on `Application` and `Domain`.
 - `Web` may depend on `Application` and `Infrastructure`.
-- `Application` must not depend on `Infrastructure`.
-- `Domain` must not depend on Web, Infrastructure, or Application.
+- `Application` does not depend on `Infrastructure`.
+- `Domain` does not depend on `Application`, `Infrastructure`, or `Web`.
 
-This prevents user-interface and provider-specific concerns from leaking into core verification logic.
+This prevents UI and provider-specific technology from leaking into core verification behavior.
 
 ---
 
-## 6. Dependency Injection and Composition Root
+## 7. Composition Root
 
-The application uses the built-in .NET dependency-injection container provided by:
+The Web project assembles the runtime application using the built-in .NET dependency-injection container.
 
-```text
-Microsoft.Extensions.DependencyInjection
-```
-
-The project does not introduce a separate dependency-injection framework.
-
-Layer-specific registration methods organize service registration while keeping `Program.cs` focused on application startup.
-
-For example:
+Conceptually:
 
 ```csharp
 builder.Services
@@ -290,615 +290,732 @@ builder.Services
     .AddInfrastructure(builder.Configuration);
 ```
 
-`AddApplication()` is responsible for registering Application-layer services.
+`AddApplication()` registers Application-layer services.
 
-`AddInfrastructure()` is responsible for registering concrete external implementations such as OCR and application-record providers.
+`AddInfrastructure()` registers external implementations such as:
 
-The Web project acts as the **composition root**, where the complete application is assembled.
-
-This enables Infrastructure implementations to be replaced without requiring Application-layer workflow changes.
-
----
-
-## 7. System Boundary
-
-The prototype begins when application data and a label image are supplied to the verification application.
-
-### The prototype is responsible for:
-
-- Accepting an alcohol label image.
-- Validating the uploaded image.
-- Loading expected application data.
-- Extracting visible text and supporting evidence from the label.
-- Parsing relevant label fields.
-- Comparing detected values with expected application values.
-- Applying supported deterministic regulatory checks.
-- Producing explainable field-level results.
-- Producing an overall `PASS`, `REVIEW`, or `FAIL` recommendation.
-- Presenting results to a human compliance agent.
-- Providing sufficient evidence for the agent to understand why a result was produced.
-
-### The prototype is not responsible for:
-
-- Direct COLA integration.
-- Modifying COLA records.
-- Replacing COLA as a system of record.
-- Making final regulatory determinations without human review.
-- Long-term records retention.
-- Production PII handling.
-- Production authentication or authorization.
-- Replacing existing TTB systems.
-- Implementing all controls required for a production FedRAMP deployment.
-
-These boundaries intentionally keep the prototype focused on demonstrating the verification capability.
-
----
-
-## 8. COLA Application-Data Boundary
-
-COLA is treated as an **upstream system of record**.
-
-Direct integration is intentionally excluded from the prototype. Instead, the application defines a narrow application-data contract containing only the information required by the verification workflow.
-
-Example:
-
-```json
-{
-  "applicationId": "COLA-84729",
-  "beverageType": "distilled_spirits",
-  "expectedData": {
-    "brandName": "Old Tom Distillery",
-    "classType": "Kentucky Straight Bourbon Whiskey",
-    "alcoholByVolume": 45.0,
-    "proof": 90,
-    "netContents": {
-      "value": 750,
-      "unit": "mL"
-    }
-  }
-}
+```text
+JsonApplicationRecordProvider
+DocumentIntelligenceLabelTextExtractor
+DocumentIntelligenceClient
 ```
 
-The prototype implementation reads this contract from local JSON fixtures.
-
-A future COLA integration can implement the same Application-layer interface without changing the verification engine.
-
-```mermaid
-flowchart LR
-    Application["Verification Application"]
-    Provider["IApplicationRecordProvider"]
-    Json["JSON Fixture Provider"]
-    Cola["Future COLA Adapter"]
-
-    Application --> Provider
-    Json --> Provider
-    Cola -.-> Provider
-```
-
-This boundary isolates the prototype from COLA implementation details while preserving a clear production integration path.
-
-The Government Warning is not modeled as unique application data. It is evaluated as a supported regulatory rule based on evidence extracted from the label.
+This keeps provider selection outside the verification workflow.
 
 ---
 
-## 9. Verification Pipeline
+## 8. Verification Pipeline
+
+The implemented verification pipeline is:
 
 ```mermaid
 flowchart TD
-    Input["Label Image + Application ID"]
+    Input["Application ID + Label Image"]
+    Load["Load Expected Application Record"]
+    Buffer["Buffer Image"]
     Validate["Validate Image"]
-    OCR["OCR / Text Extraction"]
-    Parse["Parse Structured Label Fields"]
-    Expected["Load Expected Application Data"]
-    Verify["Verification Engine"]
-    Rules["Deterministic Regulatory Rules"]
+    OCR["Azure Document Intelligence"]
+    Parse["Parse Structured Evidence"]
+    Brand["Brand Verification"]
+    ABV["ABV Verification"]
+    Proof["Proof Verification"]
+    Net["Net Contents Verification"]
+    Warning["Government Warning Verification"]
     Aggregate["Aggregate Field Results"]
     Result["PASS / REVIEW / FAIL"]
-    Human["Compliance Agent Review"]
+    Agent["Compliance Agent"]
 
-    Input --> Validate
+    Input --> Load
+    Input --> Buffer
+    Buffer --> Validate
     Validate --> OCR
     OCR --> Parse
 
-    Input --> Expected
+    Load --> Brand
+    Parse --> Brand
 
-    Parse --> Verify
-    Expected --> Verify
+    Load --> ABV
+    Parse --> ABV
 
-    Verify --> Rules
-    Rules --> Aggregate
+    Load --> Proof
+    Parse --> Proof
+
+    Load --> Net
+    Parse --> Net
+
+    OCR --> Warning
+    Parse --> Warning
+
+    Brand --> Aggregate
+    ABV --> Aggregate
+    Proof --> Aggregate
+    Net --> Aggregate
+    Warning --> Aggregate
+
     Aggregate --> Result
-    Result --> Human
+    Result --> Agent
 ```
 
-The normal verification path should favor deterministic processing after OCR.
+Invalid images are rejected before the external OCR provider is invoked.
 
-AI-assisted or probabilistic processing should be used primarily for:
-
-- Perception.
-- Text extraction.
-- Image interpretation.
-- Ambiguous evidence.
-- Classification tasks that cannot be handled reliably with deterministic rules.
-
-AI should not act as the final regulatory authority.
+The image is processed within a bounded workflow rather than persisted as a long-term application record.
 
 ---
 
-## 10. Verification Semantics
+## 9. AI Boundary
+
+Azure Document Intelligence is used for **perception**.
+
+The OCR provider supplies evidence such as:
+
+- detected text;
+- lines and words;
+- confidence information;
+- supported font-style information.
+
+Provider-specific output is converted into application-owned models before verification rules are applied.
+
+Azure Document Intelligence does **not** determine whether a label is compliant.
+
+The authority boundary is:
+
+```text
+Label Image
+    |
+    v
+AI / OCR Perception
+    |
+    v
+Structured Evidence
+    |
+    v
+Deterministic Rules
+    |
+    v
+PASS / REVIEW / FAIL
+    |
+    v
+Human Compliance Judgment
+```
+
+This is a deliberate architecture decision.
+
+---
+
+## 10. Verification Coverage
+
+Current implemented verification coverage is:
+
+| Field | Verification Strategy | Included in Overall Aggregate |
+|---|---|---|
+| Brand name | Normalization + controlled fuzzy comparison | Yes |
+| Class / type | Extracted and parsed | **No** |
+| Alcohol by volume | Deterministic numeric comparison | Yes |
+| Proof | Deterministic numeric comparison | Yes |
+| Net contents | Normalized value/unit comparison | Yes |
+| Government Warning | Deterministic supported wording/presentation rules | Yes |
+
+### Class / Type Boundary
+
+Class/type is present in the application contract and is extracted and parsed from label evidence.
+
+It is **not currently included in the automated aggregate verification result**.
+
+This limitation is intentionally documented rather than represented as completed functionality.
+
+---
+
+## 11. Verification Semantics
 
 Different fields require different comparison strategies.
 
-| Field | Verification Strategy |
-|---|---|
-| Brand name | Normalization plus controlled fuzzy comparison |
-| Class/type | Normalized comparison with ambiguity routed to `REVIEW` |
-| Alcohol by volume | Deterministic numeric comparison |
-| Proof | Deterministic numeric comparison |
-| Net contents | Deterministic value and normalized-unit comparison |
-| Government warning | Deterministic regulatory validation when OCR evidence is sufficient |
+### Brand Name
+
+Brand comparison supports normalization and controlled fuzzy matching.
 
 For example:
 
 ```text
-STONE'S THROW
+Application:
 Stone's Throw
+
+Detected:
+STONE'S THROW
+
+Normalized:
+stones throw
+stones throw
 ```
 
-may represent an obvious human-equivalent brand value even though the literal strings differ.
+Case and punctuation differences do not automatically produce a false failure.
 
-That type of variation may be handled through normalization or controlled fuzzy comparison.
+A similarity result that is plausible but not sufficiently strong can produce `REVIEW`.
 
-In contrast:
+### Alcohol by Volume
 
-```text
-Expected ABV: 45%
-Detected ABV: 40%
-```
+ABV is evaluated through deterministic numeric comparison with the expected application value.
 
-is an objective numeric mismatch and should not require a generative AI model to determine the result.
+### Proof
 
-A low-confidence OCR result should not automatically become a compliance failure.
+Proof is evaluated through deterministic numeric comparison when represented in the application record.
 
-When evidence is insufficient to make a defensible automated determination, the appropriate system response is:
+### Net Contents
 
-```text
-REVIEW
-```
+Net contents are compared after supported unit normalization.
 
-rather than manufacturing certainty.
+### Government Warning
+
+Government Warning validation is modeled as a regulatory rule rather than application-specific expected data.
+
+Supported checks include:
+
+- warning presence;
+- warning wording;
+- required heading capitalization;
+- supported typography evidence where the OCR provider supplies adequate evidence.
+
+Ambiguous visual evidence is routed to `REVIEW`.
 
 ---
 
-## 11. Government Warning Verification
-
-The Government Warning requires special handling because the wording and presentation carry regulatory significance.
-
-The verification workflow should:
-
-1. Detect whether a Government Warning is present.
-2. Extract the warning text.
-3. Evaluate OCR confidence and evidence quality.
-4. Compare supported wording deterministically.
-5. Evaluate capitalization or presentation requirements where the extracted evidence supports that determination.
-6. Route insufficient or ambiguous evidence to `REVIEW`.
-
-The system should not convert poor OCR quality directly into a regulatory failure.
-
-For example:
-
-```text
-OCR evidence insufficient to validate exact warning wording
-```
-
-should produce:
-
-```text
-REVIEW
-```
-
-rather than:
-
-```text
-FAIL
-```
-
-unless the available evidence clearly supports a failure.
-
----
-
-## 12. Human-in-the-Loop Decision Model
-
-The application produces three overall result categories.
+## 12. Decision Model
 
 ### PASS
 
-The extracted evidence is sufficiently reliable and supported deterministic checks pass.
-
-Example:
-
-```text
-Brand: PASS
-ABV: PASS
-Proof: PASS
-Net Contents: PASS
-Government Warning: PASS
-
-Overall: PASS
-```
+`PASS` is used when the supported automated checks have sufficient evidence and applicable deterministic comparisons pass.
 
 ### REVIEW
 
-The system cannot make a defensible automated determination because of:
+`REVIEW` is used when the system cannot make a defensible automated determination.
 
-- OCR confidence.
-- Image quality.
-- Ambiguous text.
-- Unsupported nuance.
-- Conflicting evidence.
-- A comparison result within a defined review threshold.
+Examples include:
 
-Example:
-
-```text
-Government Warning: REVIEW
-
-Reason:
-OCR confidence is insufficient to validate exact wording.
-```
+- fuzzy brand similarity;
+- missing or incomplete OCR evidence;
+- image-quality uncertainty;
+- insufficient typography evidence;
+- ambiguous extracted values.
 
 ### FAIL
 
-The available evidence supports a clear mismatch or supported deterministic regulatory failure.
+`FAIL` is used when available evidence clearly supports a supported mismatch or regulatory-rule failure.
 
-Example:
+### Human Authority
 
-```text
-Expected ABV: 45%
-Detected ABV: 40%
-
-Result: FAIL
-```
+The automated result is decision-support evidence.
 
 The compliance agent remains the final decision authority.
 
 ---
 
-## 13. Explainability
+## 13. COLA Boundary
 
-The system should not return only an overall status.
+COLA is treated as an upstream system of record.
 
-Each verification result should provide evidence that helps the compliance agent understand what occurred.
-
-A field-level result may contain:
+The Application layer defines:
 
 ```text
-Field: Brand Name
-Expected: Old Tom Distillery
-Detected: OLD TOM DISTILLERY
-Status: PASS
-Explanation: Values match after case normalization.
+IApplicationRecordProvider
 ```
 
-Another result may contain:
+The current prototype implementation is:
 
 ```text
-Field: Government Warning
-Status: REVIEW
-Confidence: 0.61
-Explanation: OCR confidence is insufficient to validate exact warning wording.
+JsonApplicationRecordProvider
 ```
 
-Explainability is particularly important because the prototype supports regulatory review rather than autonomous decision-making.
+A future authorized implementation could provide:
+
+```text
+ColaApplicationRecordProvider
+```
+
+without changing deterministic verification rules.
+
+```mermaid
+flowchart LR
+    Workflow["Verification Workflow"]
+    Contract["IApplicationRecordProvider"]
+    Json["Prototype JSON Fixture"]
+    COLA["Future Authorized COLA Adapter"]
+
+    Workflow --> Contract
+    Json --> Contract
+    COLA -.-> Contract
+```
+
+The prototype does not:
+
+- call production COLA;
+- modify COLA records;
+- invent an undocumented production COLA API;
+- claim knowledge of COLA's internal implementation.
+
+The adapter exists specifically to preserve that boundary.
 
 ---
 
-## 14. Performance Architecture
+## 14. Azure Document Intelligence
 
-A key stakeholder requirement is an approximately **five-second verification experience**.
+The implemented OCR provider is Azure Document Intelligence.
 
-A prior scanning pilot reportedly experienced latency in the 30-40 second range, which was considered unacceptable for agent adoption.
-
-The architecture therefore favors:
-
-- Local or low-latency OCR for the normal processing path.
-- Deterministic verification after extraction.
-- Minimal network dependencies.
-- Avoiding unnecessary generative-AI calls in the normal path.
-- Explicit timeouts for external providers.
-- Measurement of individual pipeline stages.
-
-The application should capture durations for:
+Current configuration uses:
 
 ```text
-Image validation
-OCR extraction
-Field parsing
-Verification
-Total request duration
+Model: prebuilt-read
+OCR timeout: 5 seconds
+Font-style extraction: enabled
 ```
 
-Representative benchmark results will be documented after implementation and performance testing.
+The Azure SDK client is registered by the Infrastructure layer.
 
-No performance measurement should be claimed until it has actually been measured.
+The application uses the OCR abstraction rather than consuming Azure-specific response types throughout the verification engine.
+
+This allows another OCR provider to be introduced later if needed.
 
 ---
 
-## 15. Batch Processing
+## 15. Azure Deployment Topology
 
-The architecture should allow future batch processing without requiring the core verification engine to be redesigned.
-
-A single-label verification operation should remain the fundamental processing unit:
-
-```text
-Verify one application + one label
-```
-
-Batch processing can then orchestrate multiple independent verification operations.
-
-Conceptually:
+The evaluator-accessible prototype is deployed to Azure App Service.
 
 ```mermaid
 flowchart TD
-    Batch["Batch Upload"]
-    Item1["Label 1"]
-    Item2["Label 2"]
-    Item3["Label N"]
-    Engine["Verification Engine"]
-    Results["Batch Results"]
+    User["Evaluator / Compliance Agent"]
+    App["Azure App Service<br/>Linux / .NET 8"]
+    Identity["System-Assigned<br/>Managed Identity"]
+    DI["Azure Document Intelligence<br/>East US 2 / S0"]
+    Fixtures["Prototype Application<br/>JSON Fixtures"]
 
-    Batch --> Item1
-    Batch --> Item2
-    Batch --> Item3
-
-    Item1 --> Engine
-    Item2 --> Engine
-    Item3 --> Engine
-
-    Engine --> Results
+    User -->|HTTPS| App
+    App --> Fixtures
+    App --> Identity
+    Identity -->|Azure RBAC| DI
 ```
 
-Batch capability is valuable because some importers may submit hundreds of labels, but it should not prevent delivery of the core single-label MVP.
+Implemented deployment characteristics include:
+
+- Azure App Service for Linux;
+- .NET 8 runtime;
+- HTTPS-only access;
+- Always On enabled;
+- Azure Document Intelligence in East US 2;
+- S0 Document Intelligence SKU;
+- system-assigned Managed Identity;
+- scoped `Cognitive Services User` role;
+- infrastructure represented through Bicep.
 
 ---
 
-## 16. Security and Network Considerations
+## 16. Identity and Secret Management
 
-The prototype is designed so routine verification can operate without browser-side API secrets.
+The deployed application authenticates to Azure Document Intelligence using:
 
-No secrets should be embedded in:
+```text
+System-Assigned Managed Identity
++
+Azure RBAC
+```
 
-- Client-side code.
-- Source control.
-- JavaScript.
-- Configuration files committed to Git.
+The application does not require a Cognitive Services API key in application configuration.
 
-Production evolution would require additional controls including:
+Local development uses:
 
-- Authentication.
-- Authorization.
-- Managed identities where appropriate.
-- Role-based access control.
-- Secure secret management.
-- Private networking where required.
-- Audit logging.
-- Data-retention controls.
-- PII handling requirements.
-- FedRAMP-aligned deployment controls.
+```text
+DefaultAzureCredential
+```
 
-The prototype does not claim to implement every production security requirement.
+This allows developer identity and hosted workload identity to use the same provider abstraction.
 
-The architecture also considers network restrictions that may block outbound domains. Routine processing should therefore minimize unnecessary external network dependencies.
+The browser never receives OCR credentials.
 
 ---
 
-## 17. Deployment Boundary
+## 17. Prototype Network Boundary
 
-The prototype is intended to run as a standalone .NET web application.
+The evaluator-accessible prototype currently uses the public Azure Document Intelligence endpoint.
 
-The preferred initial deployment target is:
+This is an intentional prototype trade-off.
+
+It allows an external evaluator to exercise the application without Treasury internal-network dependencies.
+
+A production architecture could evolve toward:
 
 ```text
 Azure App Service
+    |
+    v
+VNet Integration
+    |
+    v
+Private DNS
+    |
+    v
+Private Endpoint
+    |
+    v
+Azure Document Intelligence
 ```
 
-unless infrastructure requirements introduced by the selected OCR implementation require a containerized hosting model.
+Production hardening could additionally include:
 
-A containerized deployment remains an option if native OCR dependencies require greater control over the runtime environment.
+- public AI access disabled;
+- firewall restrictions;
+- NSG controls;
+- private service connectivity;
+- centralized monitoring and audit controls.
 
-The architecture avoids coupling Domain or Application logic to the hosting platform.
-
-This allows the same verification engine to operate regardless of whether the application is eventually hosted using:
-
-```text
-Azure App Service
-Azure Container Apps
-Azure Kubernetes Service
-Other supported .NET hosting environments
-```
-
-without requiring core business-rule changes.
+These are production-evolution paths, not claims about the current prototype.
 
 ---
 
-## 18. Testing Boundaries
+## 18. Observability
 
-The layered architecture supports multiple testing levels.
+The verification workflow emits non-sensitive operational telemetry.
+
+Current workflow telemetry includes:
+
+```text
+CorrelationId
+OcrDuration
+VerificationDuration
+TotalDuration
+ResultCategory
+ErrorCategory
+```
+
+The Web layer separately supports HTTP request correlation.
+
+The workflow does not intentionally log document contents as operational telemetry.
+
+Examples of excluded information include:
+
+```text
+image bytes
+OCR document text
+parsed label contents
+Government Warning contents
+uploaded filenames
+```
+
+This provides performance and troubleshooting evidence without turning document data into routine telemetry.
+
+---
+
+## 19. Timing Boundaries
+
+### OCR Duration
+
+Measures the Application-layer OCR abstraction invocation.
+
+This represents the workflow's view of OCR duration rather than relying only on provider-owned diagnostic timing.
+
+### Verification Duration
+
+Measures deterministic work after OCR, including:
+
+- structured parsing;
+- field comparisons;
+- supported regulatory checks;
+- result aggregation.
+
+### Total Duration
+
+Measures the complete Application-layer verification workflow.
+
+Browser rendering and browser-to-server Internet latency are not included in this metric.
+
+---
+
+## 20. Measured Performance
+
+The formal warm-state benchmark used five representative synthetic label fixtures across ten measured iterations each.
+
+```text
+5 fixtures
+×
+10 measured iterations
+=
+50 measured observations
+```
+
+One five-image warm-up pass was excluded from formal statistics.
+
+Measured results:
+
+| Metric | Result |
+|---|---:|
+| Measured observations | 50 |
+| Successful workflows | 50 / 50 |
+| OCR timeouts during measured phase | 0 |
+| Attempts within approximately five seconds | 50 / 50 |
+| Median observed latency | 2.201 s |
+| P95 observed latency | 2.620 s |
+| Worst observed latency | 3.277 s |
+| Median OCR latency | 2.201 s |
+| P95 OCR latency | 2.619 s |
+| Worst OCR latency | 3.276 s |
+| Median deterministic verification latency | < 1 ms |
+
+OCR accounts for nearly all measured steady-state processing time.
+
+The benchmark therefore validates that deterministic parsing, comparison, and aggregation are not the dominant latency contributors.
+
+Benchmark implementation and evidence are maintained under:
+
+```text
+tools/LabelVerification.Benchmarks/
+benchmark-results/
+```
+
+---
+
+## 21. First-Use Performance Behavior
+
+Separate diagnostics identified a first-use/warm-up effect in the end-to-end OCR path.
+
+In fresh-process testing, some early requests reached the configured five-second OCR timeout.
+
+When fixture order was reversed, the timeouts moved with request position rather than remaining associated with particular images.
+
+This supports the interpretation of a first-use effect rather than a consistent image-specific failure.
+
+The prototype does **not** attribute that behavior solely to Azure Document Intelligence.
+
+Possible contributors include:
+
+- identity initialization;
+- token acquisition;
+- .NET runtime or JIT initialization;
+- Azure SDK initialization;
+- connection establishment;
+- TLS setup;
+- network variability;
+- service-side processing variability.
+
+The five-second timeout was retained rather than increased to hide the behavior.
+
+---
+
+## 22. Testing Architecture
 
 ### Unit Tests
 
-Domain and Application verification rules can be tested without:
+Unit tests exercise deterministic verification behavior without requiring a live Azure dependency.
 
-- Launching the Web application.
-- Invoking a real OCR service.
-- Accessing COLA.
-- Deploying to Azure.
-
-Examples include:
+Representative areas include:
 
 ```text
-Brand normalization
-ABV comparison
-Proof comparison
-Net-content comparison
-Government-warning validation
-PASS / REVIEW / FAIL aggregation
+text normalization
+brand comparison
+ABV verification
+proof verification
+net-contents normalization
+Government Warning validation
+result aggregation
+structured parsing
 ```
 
 ### Integration Tests
 
-Infrastructure implementations can be tested against:
+Integration tests validate the real application composition while substituting controlled OCR evidence.
 
-- Representative JSON fixtures.
-- Representative label images.
-- OCR implementations.
-- Parsing workflows.
-- Configuration behavior.
+This allows deterministic verification of:
 
-### End-to-End Tests
+- application-record loading;
+- image validation;
+- parsing;
+- verification rules;
+- aggregation;
+- failure paths;
+- telemetry;
+- sensitive-log protections.
 
-End-to-end tests can exercise:
+### Live OCR Test
+
+Azure Document Intelligence has a separate opt-in live integration test.
+
+Normal CI intentionally disables live OCR so external-service latency or transient availability does not gate deterministic application behavior.
+
+### Benchmark Harness
+
+Performance benchmarking is isolated under:
 
 ```text
-Application Record
-       +
-Label Image
-       ↓
-Image Validation
-       ↓
-OCR
-       ↓
-Field Parsing
-       ↓
-Verification
-       ↓
-PASS / REVIEW / FAIL
+tools/LabelVerification.Benchmarks/
 ```
 
-This separation improves reliability while keeping failures easier to diagnose.
+The live benchmark is not part of normal CI.
 
 ---
 
-## 19. Observability
+## 23. Error Handling
 
-The application should provide enough telemetry to understand both system behavior and performance.
-
-Useful telemetry includes:
-
-- Correlation ID.
-- OCR processing duration.
-- Parsing duration.
-- Verification duration.
-- Total request duration.
-- Overall result category.
-- Error category.
-- Provider timeout information.
-
-Sensitive label content or future PII should not be unnecessarily written to logs.
-
-Observability should support troubleshooting without creating unnecessary data-exposure risk.
-
----
-
-## 20. Error-Handling Principles
-
-Errors should be presented in a way that helps the compliance agent recover without exposing unnecessary technical details.
+Technical processing failures are treated separately from compliance outcomes.
 
 Examples include:
 
-### Invalid Upload
-
 ```text
-The selected file is not a supported label image.
+missing application selection
+missing image
+application record not found
+invalid image
+OCR timeout
+OCR provider failure
 ```
 
-### OCR Failure
+A technical failure does not manufacture a regulatory `PASS` or `FAIL`.
 
-```text
-The label could not be read reliably. Please review the image or try another scan.
-```
-
-### Application Record Not Found
-
-```text
-The selected application record could not be loaded.
-```
-
-### Ambiguous Verification
-
-```text
-The system could not make a reliable automated determination.
-Manual review is required.
-```
-
-Technical exception details should be logged for diagnostics rather than displayed directly to end users.
+When the application successfully receives evidence but that evidence is ambiguous, `REVIEW` is preferred.
 
 ---
 
-## 21. Architectural Trade-Offs
+## 24. Batch Processing Evolution
 
-### Local or Low-Latency OCR vs. Remote AI Services
+The current user experience supports one label at a time.
 
-The stakeholder latency requirement strongly favors minimizing network calls on the normal verification path.
+Batch upload is **not implemented**.
 
-A remote AI model may provide additional capabilities, but routine deterministic checks should not depend on unnecessary model round trips.
+The architecture nevertheless preserves the single-label verification operation as an independently executable unit.
 
-### Deterministic Rules vs. Generative AI
+A future batch architecture could use:
 
-Deterministic rules are preferred when the compliance question has an objective answer.
+```mermaid
+flowchart LR
+    Batch["Batch Upload"]
+    Queue["Durable Queue"]
+    W1["Worker"]
+    W2["Worker"]
+    WN["Worker"]
+    Verify["Verification Engine"]
+    Results["Batch Results"]
 
-Generative AI is more appropriate where the problem involves perception, classification, or ambiguity.
+    Batch --> Queue
+    Queue --> W1
+    Queue --> W2
+    Queue --> WN
 
-### Standalone Prototype vs. Direct COLA Integration
+    W1 --> Verify
+    W2 --> Verify
+    WN --> Verify
 
-The prototype intentionally avoids direct COLA integration.
+    Verify --> Results
+```
 
-This reduces delivery risk while preserving a clean adapter boundary for future production integration.
+Potential production additions include:
 
-### Human Review vs. Autonomous Decisions
-
-The prototype supports agent decision-making rather than replacing it.
-
-When evidence is ambiguous, the system prefers `REVIEW` over unsupported certainty.
-
----
-
-## 22. Architectural Principles
-
-The architecture follows these principles:
-
-1. Keep regulatory verification logic independent of the user interface.
-2. Hide external providers behind Application-layer interfaces.
-3. Favor deterministic rules for objective compliance checks.
-4. Use AI where perception or ambiguity requires it.
-5. Route insufficient evidence to human review rather than manufacturing certainty.
-6. Keep the prototype loosely coupled to COLA.
-7. Add only the dependencies required by each layer.
-8. Maintain explainability at field and overall-result levels.
-9. Design the normal processing path around the stakeholder latency target.
-10. Preserve clear seams for future production integrations.
-11. Keep infrastructure-specific technology out of the Domain layer.
-12. Treat the compliance agent as the final decision authority.
-13. Measure performance before claiming performance results.
-14. Avoid unnecessary network dependencies on the normal verification path.
-15. Keep security and production evolution concerns explicit without overclaiming prototype capabilities.
+- bounded concurrency;
+- durable messaging;
+- secure temporary object storage;
+- retries;
+- horizontal worker scaling;
+- batch-level telemetry;
+- per-label correlation identifiers.
 
 ---
 
-## 23. Planned Architecture Decision Records
+## 25. Security Boundary
 
-Significant architectural decisions are recorded separately under:
+Implemented prototype controls include:
+
+- HTTPS-only application access;
+- Azure Managed Identity;
+- scoped Azure RBAC;
+- no OCR API key required in application configuration;
+- upload validation;
+- bounded processing;
+- non-sensitive operational telemetry;
+- no required long-term storage of submitted label images.
+
+The prototype does **not** claim to implement:
+
+- production federal SSO;
+- production role-based user authorization;
+- a production Authority to Operate;
+- every FedRAMP control;
+- production records-management policy;
+- full Treasury private-network topology;
+- complete production PII-handling controls.
+
+Those remain production-evolution concerns.
+
+---
+
+## 26. Known Architectural Limitations
+
+Current architectural and functional boundaries include:
+
+- class/type is extracted and parsed but not included in the automated aggregate;
+- no direct production COLA integration;
+- no production federal identity integration;
+- no batch-upload UI;
+- no complete beverage-specific regulatory coverage;
+- no required long-term document persistence;
+- typography verification is limited to evidence exposed by the OCR provider;
+- first-use OCR-path latency may exceed five seconds;
+- Application-layer performance metrics do not include browser-to-server latency;
+- final compliance authority remains human.
+
+These limitations are documented explicitly to distinguish implemented prototype behavior from future production capability.
+
+---
+
+## 27. Architecture Decision Records
+
+Architecture decisions are maintained under:
 
 ```text
 docs/decisions/
 ```
 
-Initial Architecture Decision Records include:
+Current and planned records are:
 
 ```text
 0001-layered-architecture.md
 0002-hybrid-verification-strategy.md
 0003-cola-adapter-boundary.md
+0004-azure-document-intelligence.md
+0005-managed-identity-and-rbac.md
+0006-verification-telemetry.md
 ```
 
-These ADRs document my reasoning, alternatives, consequences, and trade-offs behind the major architectural decisions in this prototype.
+The ADRs preserve the context, decision, trade-offs, and consequences behind significant engineering choices.
+
+---
+
+## 28. Architectural Principles
+
+1. **AI is used for perception, not final regulatory authority.**
+2. **Objective compliance comparisons remain deterministic where feasible.**
+3. **Ambiguous evidence becomes REVIEW rather than unsupported certainty.**
+4. **The compliance agent remains the final decision authority.**
+5. **External providers are hidden behind Application-layer abstractions.**
+6. **COLA remains an upstream boundary rather than a prototype dependency.**
+7. **Infrastructure technology remains outside the Domain layer.**
+8. **Managed Identity and scoped RBAC are preferred over application secrets.**
+9. **Operational telemetry excludes document contents.**
+10. **Performance claims are based on measured evidence.**
+11. **Prototype and production capabilities are documented separately.**
+12. **Known limitations are explicit rather than hidden.**
+
+---
+
+## 29. Summary
+
+The prototype is intentionally designed as a small, explainable, testable compliance-assistance system rather than an autonomous AI decision engine.
+
+Its primary architectural separation is:
+
+```text
+AI / OCR
+    ↓
+Evidence
+    ↓
+Deterministic Verification
+    ↓
+PASS / REVIEW / FAIL
+    ↓
+Human Judgment
+```
+
+That boundary allows the prototype to demonstrate meaningful automation while preserving traceability, testability, regulatory explainability, and a clear path toward future production integration.
