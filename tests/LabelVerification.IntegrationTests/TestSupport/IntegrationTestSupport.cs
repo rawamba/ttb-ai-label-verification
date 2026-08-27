@@ -3,6 +3,9 @@ using LabelVerification.Application.Abstractions;
 using LabelVerification.Application.LabelUnderstanding;
 using LabelVerification.Infrastructure.ApplicationRecords;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using LabelVerification.Application.Verification.Workflow;
 
 namespace LabelVerification.IntegrationTests.TestSupport;
 
@@ -133,12 +136,20 @@ internal static class IntegrationTestSupport
     /// integration implementations.
     /// </summary>
     internal static ServiceProvider BuildServiceProvider(
-        ILabelTextExtractor textExtractor)
+        ILabelTextExtractor textExtractor,
+        ILogger<LabelVerificationService>? logger = null)
     {
         var services =
             new ServiceCollection();
 
         services.AddApplication();
+
+        // The production Web host supplies the real logging infrastructure.
+        // Integration tests use a null logger unless a test explicitly needs
+        // to capture structured telemetry.
+        services.AddSingleton<ILogger<LabelVerificationService>>(
+            logger ??
+            NullLogger<LabelVerificationService>.Instance);
 
         services.AddSingleton<IApplicationRecordProvider>(
             _ =>

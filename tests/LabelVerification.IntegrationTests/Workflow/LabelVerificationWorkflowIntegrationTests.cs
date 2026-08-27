@@ -107,5 +107,63 @@ public sealed class LabelVerificationWorkflowIntegrationTests
         Assert.Equal(
             1,
             extractor.CallCount);
+
+        // Operational telemetry is returned independently from regulatory
+        // evidence so performance can be benchmarked without logging
+        // document contents.
+        Assert.NotNull(
+            result.Telemetry);
+
+        Assert.False(
+            string.IsNullOrWhiteSpace(
+                result.Telemetry.CorrelationId));
+
+        Assert.True(
+            result.Telemetry.TotalDuration >= TimeSpan.Zero);
+
+        Assert.NotNull(
+            result.Telemetry.OcrDuration);
+
+        Assert.True(
+            result.Telemetry.OcrDuration.Value >= TimeSpan.Zero);
+
+        Assert.NotNull(
+            result.Telemetry.VerificationDuration);
+
+        Assert.True(
+            result.Telemetry.VerificationDuration.Value >= TimeSpan.Zero);
+
+        Assert.True(
+            result.Telemetry.TotalDuration >=
+            result.Telemetry.OcrDuration.Value);
+
+        // Operational telemetry is returned independently from regulatory
+        // evidence so performance can be benchmarked without logging
+        // document contents.
+        Assert.NotNull(
+            result.Telemetry);
+
+        Assert.False(
+            string.IsNullOrWhiteSpace(
+                result.Telemetry.CorrelationId));
+
+        Assert.True(
+            result.Telemetry.TotalDuration >= TimeSpan.Zero);
+
+        Assert.NotNull(
+            result.Telemetry.OcrDuration);
+
+        Assert.True(
+            result.Telemetry.OcrDuration.Value >= TimeSpan.Zero);
+
+        Assert.NotNull(
+            result.Telemetry.VerificationDuration);
+
+        Assert.True(
+            result.Telemetry.VerificationDuration.Value >= TimeSpan.Zero);
+
+        Assert.True(
+            result.Telemetry.TotalDuration >=
+            result.Telemetry.OcrDuration.Value);
     }
 }

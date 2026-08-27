@@ -1,7 +1,6 @@
 @page "/"
 @rendermode InteractiveServer
 
-@using System.Diagnostics
 @using Microsoft.AspNetCore.Components.Forms
 @using LabelVerification.Application.Exceptions
 @using LabelVerification.Application.LabelUnderstanding
@@ -188,18 +187,21 @@
                                 @verification.FailCount failed.
                             </div>
 
-                            @if (_elapsedTime is not null)
+                            @if (_submissionResult.Telemetry is not null)
                             {
+                                var telemetry =
+                                    _submissionResult.Telemetry;
+
                                 <div class="mt-2 small">
 
                                     <span class="fw-semibold">
-                                        Completed in:
+                                        Total:
                                     </span>
 
                                     @FormatDuration(
-                                        _elapsedTime.Value)
+                                        telemetry.TotalDuration)
 
-                                    @if (_submissionResult.OcrResult is not null)
+                                    @if (telemetry.OcrDuration is not null)
                                     {
                                         <span class="ms-3">
 
@@ -208,7 +210,21 @@
                                             </span>
 
                                             @FormatDuration(
-                                                _submissionResult.OcrResult.Duration)
+                                                telemetry.OcrDuration.Value)
+
+                                        </span>
+                                    }
+
+                                    @if (telemetry.VerificationDuration is not null)
+                                    {
+                                        <span class="ms-3">
+
+                                            <span class="fw-semibold">
+                                                Verification:
+                                            </span>
+
+                                            @FormatDuration(
+                                                telemetry.VerificationDuration.Value)
 
                                         </span>
                                     }
@@ -281,11 +297,6 @@
 
     private string? _validationError;
 
-    // Captures the user-perceived end-to-end processing duration.
-    // Formal stage-level timing belongs to the instrumentation and
-    // performance benchmark stories.
-    private TimeSpan? _elapsedTime;
-
     private LabelVerificationSubmissionResult?
         _submissionResult;
 
@@ -302,7 +313,6 @@
     {
         _submissionResult = null;
         _validationError = null;
-        _elapsedTime = null;
 
         var file =
             args.File;
@@ -341,7 +351,6 @@
 
         _submissionResult = null;
         _validationError = null;
-        _elapsedTime = null;
 
         if (string.IsNullOrWhiteSpace(
                 _selectedApplicationId))
@@ -361,12 +370,6 @@
         }
 
         _isProcessing = true;
-
-        // Measure the complete user-visible workflow:
-        // application lookup, validation, OCR, parsing,
-        // deterministic verification, and aggregation.
-        var stopwatch =
-            Stopwatch.StartNew();
 
         try
         {
@@ -417,8 +420,7 @@
         {
             Logger.LogWarning(
                 exception,
-                "Unable to read uploaded label image {FileName}.",
-                _selectedFile?.Name);
+                "Unable to read uploaded label image.");
 
             _validationError =
                 "The selected image could not be read. " +
@@ -443,11 +445,6 @@
         }
         finally
         {
-            stopwatch.Stop();
-
-            _elapsedTime =
-                stopwatch.Elapsed;
-
             _isProcessing = false;
         }
     }
@@ -457,7 +454,6 @@
         _selectedFile = null;
         _submissionResult = null;
         _validationError = null;
-        _elapsedTime = null;
     }
 
     private static string FormatStatus(

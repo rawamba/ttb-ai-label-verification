@@ -53,6 +53,40 @@ public sealed class LabelVerificationWorkflowErrorTests
         Assert.Equal(
             0,
             extractor.CallCount);
+
+        Assert.NotNull(
+            result.Telemetry);
+
+        Assert.False(
+            string.IsNullOrWhiteSpace(
+                result.Telemetry.CorrelationId));
+
+        Assert.True(
+            result.Telemetry.TotalDuration >= TimeSpan.Zero);
+
+        // Processing ended before OCR and deterministic verification began.
+        Assert.Null(
+            result.Telemetry.OcrDuration);
+
+        Assert.Null(
+            result.Telemetry.VerificationDuration);
+
+        Assert.NotNull(
+            result.Telemetry);
+
+        Assert.False(
+            string.IsNullOrWhiteSpace(
+                result.Telemetry.CorrelationId));
+
+        Assert.True(
+            result.Telemetry.TotalDuration >= TimeSpan.Zero);
+
+        // Processing ended before OCR and deterministic verification began.
+        Assert.Null(
+            result.Telemetry.OcrDuration);
+
+        Assert.Null(
+            result.Telemetry.VerificationDuration);
     }
 
     [Fact]
