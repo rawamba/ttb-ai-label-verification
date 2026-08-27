@@ -104,11 +104,52 @@ public sealed partial class LabelFieldParser : ILabelFieldParser
     private static ParsedLabelField<string>? ParseBrandName(
         OcrResult ocrResult)
     {
-        foreach (var line in ocrResult.Lines)
+        var governmentWarning =
+            ParseGovernmentWarning(ocrResult);
+
+        var governmentWarningEvidence =
+            governmentWarning?.Evidence;
+
+        var lines =
+            ocrResult.Lines
+                .Select(line =>
+                    NormalizeWhitespace(line.Text))
+                .Where(line =>
+                    !string.IsNullOrWhiteSpace(line))
+                .ToArray();
+
+        for (var index = 0;
+             index < lines.Length;
+             index++)
         {
-            var text = NormalizeWhitespace(line.Text);
+            var text =
+                lines[index];
+
+            // Government Warning body text must never become a brand
+            // candidate. This specifically prevents trailing warning text
+            // such as "health problems." from being selected.
+            if (!string.IsNullOrWhiteSpace(
+                    governmentWarningEvidence) &&
+                governmentWarningEvidence.Contains(
+                    text,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
 
             if (!IsPotentialBrandName(text))
+            {
+                continue;
+            }
+
+            // Business terminology such as Brewery, Distillery, or Company
+            // can legitimately occur in a brand name. Only treat it as
+            // producer/business evidence when nearby OCR lines provide
+            // supporting address, location, or producer context.
+            if (ProducerOrBusinessRegex().IsMatch(text) &&
+                HasNearbyProducerContext(
+                    lines,
+                    index))
             {
                 continue;
             }
@@ -124,6 +165,57 @@ public sealed partial class LabelFieldParser : ILabelFieldParser
         }
 
         return null;
+    }
+
+    private static bool HasNearbyProducerContext(
+        IReadOnlyList<string> lines,
+        int candidateIndex)
+    {
+        const int neighborhood =
+            2;
+
+        var start =
+            Math.Max(
+                0,
+                candidateIndex - neighborhood);
+
+        var end =
+            Math.Min(
+                lines.Count - 1,
+                candidateIndex + neighborhood);
+
+        for (var index = start;
+             index <= end;
+             index++)
+        {
+            if (index == candidateIndex)
+            {
+                continue;
+            }
+
+            var nearby =
+                lines[index];
+
+            if (ProducerPrefixRegex().IsMatch(
+                    nearby) ||
+                AddressLikeRegex().IsMatch(
+                    nearby))
+            {
+                return true;
+            }
+
+            if (TryParseLocationLine(
+                    nearby,
+                    out _,
+                    out _,
+                    out _,
+                    out _))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsPotentialBrandName(string text)
@@ -166,7 +258,7 @@ public sealed partial class LabelFieldParser : ILabelFieldParser
             return false;
         }
 
-        if (ProducerOrBusinessRegex().IsMatch(text) ||
+        if (ProducerPrefixRegex().IsMatch(text) ||
             AddressLikeRegex().IsMatch(text) ||
             LooksLikeCityStateLine(text))
         {
@@ -981,7 +1073,7 @@ public sealed partial class LabelFieldParser : ILabelFieldParser
     private static partial Regex AlcoholByVolumeRegex();
 
     [GeneratedRegex(
-        @"(?<value>\d{1,3})\s*(?:°\s*)?PROOF\b",
+        @"(?<value>\d{1,3})\s*(?:\u00B0\s*)?PROOF\b",
         RegexOptions.IgnoreCase |
         RegexOptions.CultureInvariant)]
     private static partial Regex ProofRegex();
