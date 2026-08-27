@@ -1,3 +1,18 @@
+<!--
+TTB AI-Powered Alcohol Label Verification
+Evaluator-facing repository README.
+
+Maintenance guidance:
+- Describe implemented prototype behavior accurately.
+- Keep regulatory automation explicitly bounded.
+- Separate technical processing failures from regulatory outcomes.
+- Distinguish per-label latency from batch throughput.
+- Distinguish authentication/startup readiness from the five-second OCR
+  provider-operation timeout.
+- Do not describe future COLA, durable queueing, or private networking as
+  implemented.
+-->
+
 # AI-Powered Alcohol Label Verification
 
 ### Human-in-the-loop label verification for fast, explainable compliance review
@@ -15,6 +30,15 @@ This prototype demonstrates how alcohol-label review work can be accelerated wit
 A submitted label image is validated, processed with Azure Document Intelligence, converted into structured evidence, compared with application-derived values, evaluated against supported regulatory rules, and presented to the compliance agent as an explainable:
 
 **PASS · REVIEW · FAIL**
+
+Technical processing problems are reported separately as:
+
+**ERROR**
+
+The application supports both:
+
+- **Single-label verification** for one image at a time.
+- **Batch verification** for multiple label images associated with the same application record.
 
 ---
 
@@ -34,13 +58,13 @@ The prototype intentionally does **not** connect directly to the production COLA
 
 ---
 
-# Engineering Documentation
+## Engineering Documentation
 
 Additional engineering documentation is available under [`docs/`](docs/):
 
 | Document | Purpose |
 |---|---|
-| [Application Architecture](docs/architecture.md) | Implemented system architecture, verification pipeline, Azure deployment, security boundaries, telemetry, performance, and known limitations |
+| [Application Architecture](docs/architecture.md) | Implemented architecture, single-label and batch workflows, Azure deployment, security boundaries, telemetry, performance, and known limitations |
 | [Regulatory References](docs/regulatory-references.md) | Regulatory traceability for the bounded distilled-spirits verification rules implemented by the prototype |
 | [Architecture Decision Records](docs/decisions/) | Context, decisions, alternatives, and consequences behind significant engineering choices |
 
@@ -57,18 +81,25 @@ Additional engineering documentation is available under [`docs/`](docs/):
 
 ---
 
-# Evaluator Quick Walkthrough
+## Evaluator Quick Walkthrough
+
+<!--
+The evaluator walkthrough demonstrates both modes while keeping the same
+underlying verification engine and human-review model.
+-->
 
 The fastest way to evaluate the prototype is:
 
 1. Open the deployed application.
 2. Select the mock application record `COLA-84729`.
-3. Upload a representative label image.
-4. Select **Verify Label**.
-5. Review the overall **PASS / REVIEW / FAIL** result.
-6. Inspect the field-level evidence and explanations.
-7. Review the OCR, verification, and total processing durations.
-8. Use **Mark Reviewed** on REVIEW cases to exercise the human-review workflow.
+3. Choose **Single label** or **Batch upload**.
+4. Upload one or more representative label images.
+5. Start verification.
+6. Review the overall **PASS / REVIEW / FAIL** result for each label.
+7. Inspect field-level evidence and explanations.
+8. In batch mode, filter results by **PASS**, **REVIEW**, **FAIL**, or **ERROR**.
+9. Open individual batch results to inspect the same evidence used by single-label verification.
+10. Treat **REVIEW** as a human decision point rather than an automated failure.
 
 Representative fixtures are available under:
 
@@ -96,11 +127,11 @@ All repository fixtures are synthetic and contain no production applicant data.
 
 ---
 
-# Why This Approach
+## Why This Approach
 
 The stakeholder requirements create three competing goals:
 
-- **Speed:** routine reviews should return in approximately five seconds.
+- **Speed:** routine label checks should return in approximately five seconds per label.
 - **Accuracy:** subtle label differences and regulatory wording matter.
 - **Usability:** the tool should reduce agent workload rather than create another complicated system to operate.
 
@@ -126,7 +157,7 @@ The system does **not** use a generative model as the final authority for determ
 
 ---
 
-# Architecture
+## Architecture
 
 The solution follows a layered architecture that isolates presentation, workflow orchestration, external services, and deterministic verification logic.
 
@@ -134,7 +165,12 @@ The solution follows a layered architecture that isolates presentation, workflow
 flowchart TD
     A[Compliance Agent] --> B[Blazor Server UI]
 
-    B --> C[LabelVerificationService]
+    B --> M{Verification Mode}
+
+    M -->|Single| C[LabelVerificationService]
+    M -->|Batch| BA[BatchLabelVerificationService]
+
+    BA --> C
 
     C --> D[Application Adapter]
     D --> E[Mock COLA JSON Fixture]
@@ -149,45 +185,48 @@ flowchart TD
 
     J --> K[Brand Comparison]
     J --> L[ABV / Proof]
-    J --> M[Net Contents]
-    J --> N[Government Warning]
+    J --> N[Net Contents]
+    J --> O[Government Warning]
 
-    K --> O[Result Aggregator]
-    L --> O
-    M --> O
-    N --> O
+    K --> P[Result Aggregator]
+    L --> P
+    N --> P
+    O --> P
 
-    O --> P{Overall Result}
+    P --> Q{Overall Result}
 
-    P -->|PASS| Q[Routine Match]
-    P -->|REVIEW| R[Human Review]
-    P -->|FAIL| S[Clear Supported Mismatch]
+    Q -->|PASS| R[Routine Match]
+    Q -->|REVIEW| S[Human Review]
+    Q -->|FAIL| T[Clear Supported Mismatch]
 
-    Q --> A
     R --> A
     S --> A
+    T --> A
 ```
 
-## Layer Responsibilities
+### Layer Responsibilities
 
 | Layer | Responsibility |
 |---|---|
-| `LabelVerification.Web` | Blazor Server compliance-agent experience |
-| `LabelVerification.Application` | Verification workflow orchestration and telemetry |
-| `LabelVerification.Domain` | Deterministic comparison and supported compliance rules |
+| `LabelVerification.Web` | Blazor Server compliance-agent experience, upload handling, batch staging, results, and human-review UX |
+| `LabelVerification.Application` | Single-label and batch workflow orchestration, verification services, progress, and telemetry |
+| `LabelVerification.Domain` | Business concepts and deterministic verification models |
 | `LabelVerification.Infrastructure` | Azure Document Intelligence and application-record adapters |
 
 This separation allows the OCR provider, application-data source, and future COLA integration to evolve without coupling those implementation details to the verification rules.
 
 ---
 
-# Verification Pipeline
+## Verification Pipeline
 
 ```text
 Label Image
     |
     v
 File / Image Validation
+    |
+    v
+Azure Authentication Readiness
     |
     v
 Azure Document Intelligence
@@ -222,17 +261,157 @@ Deterministic Comparisons    Government Warning Rules
 
 The architecture deliberately separates:
 
-1. **Perception** — OCR and extraction.
-2. **Interpretation** — provider-neutral structured parsing.
-3. **Compliance logic** — deterministic comparisons and supported rules.
-4. **Decision support** — explainable PASS / REVIEW / FAIL.
-5. **Final judgment** — human compliance agent.
+1. **Authentication readiness** — establish Azure identity/token readiness before the latency-sensitive OCR operation begins.
+2. **Perception** — OCR and extraction.
+3. **Interpretation** — provider-neutral structured parsing.
+4. **Compliance logic** — deterministic comparisons and supported rules.
+5. **Decision support** — explainable PASS / REVIEW / FAIL.
+6. **Final judgment** — human compliance agent.
 
 ---
 
-# Verification Coverage
+## Batch Verification Workflow
 
-## Application-Derived Fields
+<!--
+The batch coordinator reuses the existing single-label verification service.
+It coordinates work but does not duplicate regulatory logic.
+-->
+
+Stakeholders identified submissions containing approximately 200–300 labels.
+
+The prototype implements a batch workflow designed for that use case.
+
+### Current Batch Behavior
+
+The batch workflow supports:
+
+- multiple-label selection;
+- configurable maximum batch size;
+- default maximum batch size of **300 labels**;
+- bounded concurrency;
+- default maximum concurrency of **3 labels**;
+- per-label processing state;
+- per-label regulatory result;
+- per-label fault isolation;
+- live progress;
+- PASS / REVIEW / FAIL / ERROR filtering;
+- result search;
+- per-label drill-down;
+- preservation of human review for REVIEW outcomes;
+- batch-level correlation;
+- retention of the existing per-label workflow correlation identifier.
+
+The batch coordinator does **not** implement regulatory rules itself.
+
+Instead:
+
+```text
+BatchLabelVerificationService
+        |
+        +--> LabelVerificationService
+        |
+        +--> LabelVerificationService
+        |
+        +--> LabelVerificationService
+        |
+        ...
+```
+
+Every item reuses the same existing single-label verification workflow.
+
+### Processing State vs Regulatory Status
+
+The batch workflow intentionally separates technical processing state from regulatory outcome.
+
+Technical processing states include:
+
+```text
+Pending
+Processing
+Completed
+Error
+```
+
+Regulatory results include:
+
+```text
+PASS
+REVIEW
+FAIL
+```
+
+A technical `ERROR` is **not** a regulatory `FAIL`.
+
+This prevents infrastructure or OCR failures from being misrepresented as compliance determinations.
+
+### Fault Isolation
+
+Each label is processed independently.
+
+A technical problem affecting one image does not terminate the remaining batch where independent processing can continue.
+
+For example:
+
+```text
+Label 1 -> PASS
+Label 2 -> ERROR
+Label 3 -> REVIEW
+Label 4 -> FAIL
+Label 5 -> PASS
+```
+
+The batch still returns the independently completed results.
+
+### Bounded Concurrency
+
+The prototype does not launch hundreds of OCR requests simultaneously.
+
+The default configuration is:
+
+```text
+MaxBatchSize = 300
+MaxConcurrency = 3
+```
+
+These values are configurable.
+
+Bounded concurrency protects:
+
+- Azure OCR capacity;
+- application resources;
+- latency stability;
+- predictable fault behavior.
+
+### Temporary Upload Staging
+
+Blazor Server browser-file streams are not used concurrently by OCR workers.
+
+Selected batch images are first copied sequentially to randomly named temporary server files.
+
+```text
+Browser
+   |
+   | sequential upload
+   v
+Temporary server staging
+   |
+   +--> Worker 1
+   +--> Worker 2
+   +--> Worker 3
+           |
+           v
+Existing verification workflow
+```
+
+Temporary files are deleted when batch processing completes or terminates.
+
+The prototype does **not** implement long-term document persistence.
+
+---
+
+## Verification Coverage
+
+### Application-Derived Fields
 
 | Field | Current strategy | Included in automated aggregate |
 |---|---|---|
@@ -242,7 +421,7 @@ The architecture deliberately separates:
 | **Proof** | Deterministic numeric comparison | Yes |
 | **Net contents** | Value/unit normalization + deterministic comparison | Yes |
 
-## Brand Name Example
+### Brand Name Example
 
 ```text
 Application:
@@ -265,7 +444,7 @@ When similarity falls into an ambiguous band, the system surfaces **REVIEW** ins
 
 ---
 
-# Regulatory Rules
+## Regulatory Rules
 
 | Requirement | Current strategy |
 |---|---|
@@ -279,15 +458,15 @@ The Government Warning is intentionally modeled as a regulatory rule rather than
 
 ---
 
-# Human-in-the-Loop Decision Model
+## Human-in-the-Loop Decision Model
 
 The automated result is **decision-support evidence**, not autonomous regulatory adjudication.
 
-## PASS
+### PASS
 
 Used when supported required fields are detected with sufficient evidence and applicable deterministic comparisons pass.
 
-## REVIEW
+### REVIEW
 
 Used when automation should defer to human judgment, including situations such as:
 
@@ -298,11 +477,25 @@ Used when automation should defer to human judgment, including situations such a
 - missing or ambiguous fields;
 - evidence that does not support a confident deterministic conclusion.
 
-## FAIL
+### FAIL
 
 Used when the system has sufficient evidence of a clear supported mismatch or regulatory-rule failure.
 
-## Final Authority
+### ERROR
+
+Used when the technical processing workflow could not complete.
+
+Examples include:
+
+- unreadable image stream;
+- authentication-readiness failure;
+- OCR provider failure;
+- invalid application data;
+- unexpected technical exception.
+
+`ERROR` is deliberately separate from PASS / REVIEW / FAIL.
+
+### Final Authority
 
 The compliance agent remains the final decision-maker.
 
@@ -310,7 +503,7 @@ A technical workflow completing successfully can therefore produce **PASS**, **R
 
 ---
 
-# Application Data Boundary
+## Application Data Boundary
 
 The take-home assignment does not provide:
 
@@ -358,42 +551,60 @@ The Government Warning is intentionally not stored in the mock application recor
 
 ---
 
-# Measured Prototype Performance
+## Azure Authentication Readiness
 
-A core stakeholder requirement is an approximately **five-second response target** for routine label checks.
+<!--
+Authentication readiness is intentionally separate from the normal
+five-second OCR provider-operation timeout.
+-->
 
-The verification workflow records separate operational measurements for:
+The OCR client and extractor share a single Azure `TokenCredential`.
 
-- `TotalDuration`
-- `OcrDuration`
-- `VerificationDuration`
+The shared credential uses an in-process token cache so concurrent first-use requests can reuse the same valid Cognitive Services access token.
 
-This allows the prototype to identify performance bottlenecks empirically rather than infer them.
+The workflow establishes authentication readiness before starting the latency-sensitive Azure Document Intelligence operation.
+
+Default timing boundaries are:
+
+```text
+Authentication readiness timeout: 15 seconds
+OCR provider-operation timeout:     5 seconds
+```
+
+This separation does **not** hide startup latency.
+
+The Application-layer workflow still measures the complete extractor invocation, and batch wall-clock measurements still include first-use startup cost.
+
+The design prevents credential discovery or token acquisition from consuming the entire five-second OCR provider-operation budget.
 
 ---
 
-## Formal Warm-State Benchmark
+## Measured Prototype Performance
 
-The formal benchmark used five representative synthetic fixtures:
+A core stakeholder requirement is an approximately **five-second response target per routine label verification**.
 
-- baseline compliant label;
-- brand-name variation;
-- rotated label;
-- degraded image;
-- glare-affected image.
+The prototype measures single-label latency and batch throughput separately.
 
-### Methodology
+> **The approximately five-second target applies to an individual label-processing operation after required startup readiness is established. It is not a claim that a 30-, 200-, or 300-label batch completes in five seconds.**
 
-- One complete five-image warm-up pass
-- Warm-up observations excluded from formal statistics
-- Ten measured iterations per fixture
-- **50 formal observations total**
-- Fixture starting position rotated between iterations
-- Azure Document Intelligence timeout fixed at five seconds
-- Timeout and processing failures retained as target misses
-- Nearest-rank percentile method used for p95
+---
 
-### Overall Results
+### Formal Single-Label Warm-State Benchmark
+
+The formal single-label benchmark used five representative synthetic fixtures.
+
+#### Methodology
+
+- One complete five-image warm-up pass.
+- Warm-up observations excluded from formal statistics.
+- Ten measured iterations per fixture.
+- **50 formal observations total.**
+- Fixture starting position rotated between iterations.
+- Azure Document Intelligence provider-operation timeout fixed at five seconds.
+- Timeout and processing failures retained as target misses.
+- Nearest-rank percentile method used for p95.
+
+#### Overall Results
 
 | Metric | Result |
 |---|---:|
@@ -409,7 +620,7 @@ The formal benchmark used five representative synthetic fixtures:
 | Worst OCR latency | 3.276 s |
 | Median deterministic verification latency | < 1 ms |
 
-> **Performance result:** The measured warm-state workflow met the approximately five-second stakeholder target on every formal benchmark attempt.
+> **Performance result:** The measured warm-state single-label workflow met the approximately five-second stakeholder target on every formal benchmark attempt.
 
 OCR accounted for nearly all observed processing latency.
 
@@ -419,17 +630,78 @@ A **successful workflow** means the technical verification pipeline completed. I
 
 ---
 
-## Results by Fixture
+### Formal Batch Throughput Benchmark
 
-| Fixture | N | Success | OCR Timeouts | ≤ 5 sec | Median | P95 | Worst |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| `compliant-label.png` | 10 | 10 | 0 | 100% | 2.190 s | 2.195 s | 2.195 s |
-| `brand-variation-label.png` | 10 | 10 | 0 | 100% | 2.182 s | 3.277 s | 3.277 s |
-| `rotated-label.png` | 10 | 10 | 0 | 100% | 2.302 s | 2.620 s | 2.620 s |
-| `degraded-label.jpg` | 10 | 10 | 0 | 100% | 2.206 s | 2.482 s | 2.482 s |
-| `compliant-with-glare.jpg` | 10 | 10 | 0 | 100% | 2.203 s | 2.253 s | 2.253 s |
+<!--
+Batch wall-clock duration and per-item latency are intentionally reported
+separately. This prevents the five-second per-label target from being
+misinterpreted as a whole-batch SLA.
+-->
 
-Detailed benchmark artifacts are available under:
+The implemented batch coordinator was measured using:
+
+```text
+30 labels per batch
+3 measured batches
+3 maximum concurrent labels
+90 formal label attempts
+```
+
+An additional six-label concurrent warm-up batch was executed and excluded from formal statistics.
+
+#### Final Batch Results
+
+| Metric | Result |
+|---|---:|
+| **Measured batches** | **3** |
+| **Labels per measured batch** | **30** |
+| **Formal label attempts** | **90** |
+| **Returned item results** | **90 / 90** |
+| **Technical errors** | **0** |
+| **Per-label attempts within five seconds** | **90 / 90 (100%)** |
+| **Median per-label duration** | **2.213 s** |
+| **P95 per-label duration** | **2.396 s** |
+| **Worst per-label duration** | **3.239 s** |
+| **Median 30-label batch wall time** | **23.038 s** |
+| **P95 30-label batch wall time** | **23.747 s** |
+| **Median throughput** | **78.1 labels/min** |
+| **P95 measured throughput** | **79.8 labels/min** |
+| Maximum concurrency | 3 |
+
+Regulatory outcomes across the 90 measured labels were:
+
+| Result | Count |
+|---|---:|
+| PASS | 36 |
+| REVIEW | 18 |
+| FAIL | 36 |
+| Technical ERROR | 0 |
+
+These outcome counts reflect the deliberately mixed synthetic benchmark fixture pool.
+
+They are **not** a quality score or pass-rate claim.
+
+#### Excluded Warm-Up Batch
+
+The final benchmark used a six-label concurrent warm-up batch.
+
+Observed warm-up behavior:
+
+```text
+6 requested
+6 returned
+0 technical errors
+10.739 s batch wall time
+33.5 labels/min
+```
+
+The warm-up demonstrates that first-use startup remains materially slower than steady-state processing even though it no longer produces OCR timeout failures in the measured implementation.
+
+The warm-up is therefore retained as diagnostic evidence and excluded from formal steady-state statistics.
+
+#### Benchmark Evidence
+
+Single-label benchmark artifacts:
 
 ```text
 benchmark-results/
@@ -438,7 +710,17 @@ benchmark-results/
   warm-summary.md
 ```
 
-The reusable benchmark harness is located at:
+Batch benchmark artifacts:
+
+```text
+benchmark-results/
+  batch-results.csv
+  batch-item-results.csv
+  batch-summary.json
+  batch-summary.md
+```
+
+The reusable benchmark harness is located under:
 
 ```text
 tools/LabelVerification.Benchmarks/
@@ -446,66 +728,109 @@ tools/LabelVerification.Benchmarks/
 
 ---
 
-# First-Use / Warm-Up Observation
+## First-Use / Warm-Up Observation
 
-Separate diagnostic runs identified a repeatable **first-use effect in the end-to-end OCR path**.
+Earlier diagnostics identified a repeatable **first-use effect in the end-to-end OCR path**.
 
-## Diagnostic A — Original Fixture Order
+Before authentication readiness was separated from the five-second OCR provider-operation budget, early concurrent requests could consume that budget during startup and reach the timeout boundary.
 
-| Phase | Result |
-|---|---|
-| First pass | 3 / 5 completed; first 2 requests reached the five-second OCR timeout |
-| Immediate second pass | 5 / 5 completed successfully |
+The failure pattern moved with **request position** rather than remaining associated with particular label fixtures.
 
-## Diagnostic B — Reversed Fixture Order
+That evidence supported a startup/readiness problem rather than an image-specific OCR defect.
 
-| Phase | Result |
-|---|---|
-| First pass | 2 / 5 completed; first 3 requests reached the five-second OCR timeout |
-| Immediate second pass | 5 / 5 completed successfully |
+The prototype does **not** claim that authentication was proven to be the sole contributor to all startup latency.
 
-When fixture order was reversed, the failures moved with **request position** rather than remaining attached to particular images.
+Potential first-use contributors still include:
 
-This is evidence of a first-use / warm-up effect rather than a consistent image-specific performance problem.
-
-The prototype does **not** attribute this effect solely to Azure Document Intelligence.
-
-First-use latency may include some combination of:
-
-- credential discovery or token acquisition;
+- credential discovery;
+- token acquisition;
 - .NET runtime or JIT initialization;
 - Azure SDK initialization;
 - connection establishment;
 - TLS/network setup;
 - provider-side processing variability.
 
-The formal benchmark therefore reports steady-state measurements separately while documenting first-use behavior as a production-hardening consideration.
+### Implemented Mitigation
+
+The final implementation:
+
+1. shares one Azure credential between authentication readiness and the Document Intelligence client;
+2. caches a valid token in process;
+3. bounds authentication readiness separately at **15 seconds**;
+4. starts the normal **five-second OCR provider-operation timeout only after authentication readiness succeeds**; and
+5. continues measuring startup cost in Application telemetry and batch wall-clock timing.
+
+The mitigation is supported by the final live batch evidence:
+
+```text
+Excluded warm-up:
+6 / 6 returned
+0 errors
+
+Formal measured phase:
+90 / 90 returned
+0 technical errors
+90 / 90 within the five-second per-item provider-operation target
+```
+
+This evidence supports the mitigation while avoiding the stronger claim that authentication was conclusively the only source of first-use latency.
 
 ---
 
-# Benchmark Timing Boundary
+## Benchmark Timing Boundaries
 
-The primary benchmark metric is **observed verification-attempt latency**.
+### Authentication Readiness
+
+The extractor first ensures a valid Azure Cognitive Services token is available.
+
+```text
+AuthenticationReadinessTimeout = 15 seconds
+```
+
+This is a startup/reuse boundary rather than the normal OCR provider-operation target.
+
+### Single-Label OCR Operation
+
+After authentication readiness succeeds:
+
+```text
+OcrProviderOperationTimeout = 5 seconds
+```
 
 For completed workflows:
 
 ```text
-ObservedAttempt = Application-layer TotalDuration
+Application OcrDuration = complete extractor invocation
+Application TotalDuration = complete verification workflow
 ```
 
-If an OCR exception occurs before normal workflow telemetry can be returned:
+Application telemetry therefore continues to expose authentication/startup cost.
+
+### Batch Benchmark
+
+For each label:
 
 ```text
-ObservedAttempt = benchmark harness elapsed time
+ItemDuration = independent batch-item verification duration
 ```
 
-This prevents timeout attempts from being silently excluded and producing artificially favorable performance statistics.
+For the whole batch:
 
-The benchmark does **not** measure browser rendering time or Internet transport between the evaluator's browser and the deployed Blazor application.
+```text
+BatchWallTime = benchmark-observed elapsed time
+```
+
+Throughput is calculated separately:
+
+```text
+LabelsPerMinute = returned item count / batch wall time
+```
+
+Browser rendering, browser upload time, temporary browser-to-server staging, and human-review time are not included in the service-throughput benchmark.
 
 ---
 
-# Benchmark Environment
+## Benchmark Environment
 
 | Property | Value |
 |---|---|
@@ -519,20 +844,21 @@ The benchmark does **not** measure browser rendering time or Internet transport 
 | Azure region | East US 2 |
 | Document Intelligence SKU | S0 |
 | OCR model | `prebuilt-read` |
-| OCR timeout | 5 seconds |
+| Authentication-readiness timeout | 15 seconds |
+| OCR provider-operation timeout | 5 seconds |
 | Font-style extraction | Enabled |
-| Authentication | `DefaultAzureCredential` |
-| Formal sample size | 50 |
-| Excluded warm-up observations | 5 |
-| Source commit | `96cdd6ca966a82f63ca72bc6c9b287ba2a574e6b` |
+| Local authentication | Shared cached `DefaultAzureCredential` |
+| Azure-hosted authentication | System-assigned Managed Identity through `DefaultAzureCredential` |
+| Batch maximum concurrency | 3 |
+| Batch configured maximum size | 300 |
 
 ---
 
-# Observability
+## Observability
 
 The verification workflow emits non-sensitive operational telemetry.
 
-Supported telemetry includes:
+Supported single-label telemetry includes:
 
 - workflow correlation ID;
 - OCR duration;
@@ -541,21 +867,33 @@ Supported telemetry includes:
 - result category;
 - processing error category.
 
-Sensitive document data is intentionally excluded.
+Batch processing additionally maintains:
 
-The application does **not** write the following as verification telemetry:
+- batch correlation ID;
+- individual item workflow correlation IDs;
+- total item count;
+- completed item count;
+- PASS count;
+- REVIEW count;
+- FAIL count;
+- ERROR count;
+- per-item processing status.
+
+Sensitive document data is intentionally excluded from routine operational telemetry.
+
+The application does **not** intentionally write the following as verification telemetry:
 
 - uploaded image contents;
 - OCR document text;
 - extracted label values;
 - Government Warning text;
-- uploaded filename.
+- uploaded filenames.
 
-The Web layer also provides HTTP request correlation separately from the workflow-level verification correlation ID.
+The benchmark artifacts may record **synthetic repository fixture names** for reproducibility. They do not contain OCR text, extracted field values, or image bytes.
 
 ---
 
-# Technology Stack
+## Technology Stack
 
 | Area | Technology |
 |---|---|
@@ -564,7 +902,9 @@ The Web layer also provides HTTP request correlation separately from the workflo
 | Language | C# |
 | OCR / AI perception | Azure Document Intelligence |
 | OCR model | `prebuilt-read` |
+| Azure credential readiness | Shared `DefaultAzureCredential` with in-process token caching |
 | Verification | Deterministic and fuzzy field-specific rules |
+| Batch coordination | Bounded in-process parallel processing |
 | Application data | JSON fixture through adapter abstraction |
 | Hosting | Azure App Service for Linux |
 | Azure authentication | System-assigned Managed Identity |
@@ -572,11 +912,11 @@ The Web layer also provides HTTP request correlation separately from the workflo
 | Infrastructure as Code | Bicep |
 | CI/CD | Azure Pipelines |
 | Testing | xUnit |
-| Benchmarking | Dedicated .NET benchmark harness |
+| Benchmarking | Dedicated .NET single-label and batch harnesses |
 
 ---
 
-# Azure Deployment
+## Azure Deployment
 
 The prototype is deployed to Azure App Service.
 
@@ -616,26 +956,35 @@ A production environment would evaluate additional network isolation and private
 
 ---
 
-# Security and Privacy
+## Security and Privacy
 
 Security decisions in the prototype are intentionally visible rather than implied.
 
-## Implemented Prototype Controls
+### Implemented Prototype Controls
 
-- HTTPS-only application access
-- system-assigned Managed Identity
-- Azure RBAC for Document Intelligence
-- no OCR API keys stored in application configuration
-- upload type validation
-- upload size validation
-- bounded in-memory processing
-- no requirement for persistent label-image storage
-- structured error handling
-- non-sensitive operational telemetry
-- deterministic compliance logic separated from AI extraction
-- human review for ambiguous evidence
+- HTTPS-only application access.
+- System-assigned Managed Identity.
+- Azure RBAC for Document Intelligence.
+- No OCR API keys stored in application configuration.
+- Shared in-process Azure access-token cache.
+- Bounded authentication-readiness timeout.
+- Bounded OCR provider-operation timeout.
+- Upload type validation.
+- Upload size validation.
+- Configurable maximum batch size.
+- Bounded batch concurrency.
+- Temporary randomly named server-side batch staging.
+- Staged-file cleanup after batch processing.
+- No required long-term label-image persistence.
+- Per-label fault isolation.
+- Structured error handling.
+- Non-sensitive operational telemetry.
+- Deterministic compliance logic separated from AI extraction.
+- Human review for ambiguous evidence.
 
-## Production Evolution
+The in-process token cache is not a persistent credential store.
+
+### Production Evolution
 
 A production Treasury environment would additionally require consideration of:
 
@@ -658,11 +1007,13 @@ The prototype does not claim to represent a completed production ATO or FedRAMP 
 
 ---
 
-# Network-Constrained Architecture
+## Network-Constrained Architecture
 
 Stakeholder discovery identified restricted outbound connectivity as an important operational constraint.
 
-The browser does not connect directly to the OCR service. OCR calls are initiated server-side by the application.
+The browser does not connect directly to the OCR service.
+
+OCR calls are initiated server-side by the application.
 
 ```mermaid
 flowchart LR
@@ -698,44 +1049,7 @@ without changing the deterministic verification rules.
 
 ---
 
-# Batch Processing
-
-Stakeholders identified submissions containing approximately 200–300 labels.
-
-The current prototype intentionally implements a focused **single-label workflow**.
-
-Batch upload is **not currently implemented**.
-
-The architecture supports a future batch-processing model such as:
-
-```mermaid
-flowchart LR
-    A[Batch Upload] --> B[Durable Queue]
-
-    B --> C[Worker 1]
-    B --> D[Worker 2]
-    B --> E[Worker N]
-
-    C --> F[Verification Engine]
-    D --> F
-    E --> F
-
-    F --> G[Aggregated Results]
-```
-
-A production-scale implementation could add:
-
-- bounded concurrency;
-- durable queues;
-- temporary secure object storage;
-- retry handling;
-- horizontal worker scaling;
-- per-label correlation IDs;
-- batch-level reporting.
-
----
-
-# Error Handling
+## Error Handling
 
 The application distinguishes technical processing failures from compliance outcomes.
 
@@ -745,23 +1059,38 @@ Examples include:
 - empty image;
 - invalid image signature;
 - application record not found;
+- authentication-readiness timeout;
+- authentication failure;
 - OCR timeout;
 - OCR service failure;
-- unreadable or incomplete evidence.
+- unreadable image stream;
+- invalid application data.
 
 Technical failures do not manufacture a compliance PASS or FAIL.
+
+In batch mode, a technical failure affects only that item where possible.
 
 Where the evidence itself is ambiguous, the preferred outcome is **REVIEW**.
 
 ---
 
-# Testing Strategy
+## Testing Strategy
 
-The repository uses deterministic automated tests for the core application and an opt-in live Azure OCR test for external-service validation.
+<!--
+The current solution baseline is verified by the normal deterministic test run.
+External live OCR remains opt-in and is not required for normal CI success.
+-->
 
-## Unit Tests
+The current solution baseline contains:
 
-Coverage includes areas such as:
+```text
+192 passed
+0 failed
+```
+
+### Unit Tests
+
+Coverage includes:
 
 - textual normalization;
 - fuzzy brand comparison;
@@ -771,9 +1100,17 @@ Coverage includes areas such as:
 - Government Warning validation;
 - missing-field behavior;
 - result aggregation;
-- structured parsing.
+- structured parsing;
+- batch validation;
+- batch result ordering;
+- bounded concurrency;
+- per-item fault isolation;
+- technical-error separation;
+- batch progress;
+- batch correlation;
+- cancellation propagation.
 
-## Integration Tests
+### Integration Tests
 
 Integration coverage includes:
 
@@ -785,17 +1122,24 @@ Integration coverage includes:
 - invalid-image behavior;
 - OCR failure behavior;
 - workflow telemetry;
-- sensitive-log protections.
+- sensitive-log protections;
+- batch execution through the real Application-layer workflow;
+- mixed regulatory outcomes;
+- per-item batch fault isolation;
+- technical error vs regulatory result separation;
+- batch progress and correlation.
 
 Normal CI replaces the external OCR dependency with controlled OCR evidence so deterministic tests do not depend on live Azure availability.
 
-## Live OCR Test
+### Live OCR Test
 
 Azure Document Intelligence integration testing is explicitly opt-in.
 
 ```powershell
+# Enable the live Azure OCR test explicitly.
 $env:RUN_LIVE_OCR_TESTS = "true"
 
+# Run the integration test project against Azure Document Intelligence.
 dotnet test `
     ".\tests\LabelVerification.IntegrationTests\LabelVerification.IntegrationTests.csproj" `
     --configuration Release
@@ -811,7 +1155,7 @@ External-service latency and transient availability therefore do not determine w
 
 ---
 
-# Representative Test Dataset
+## Representative Test Dataset
 
 Synthetic verification fixtures are located under:
 
@@ -844,34 +1188,33 @@ The manifest documents intended behavior, fixture purpose, and known verificatio
 
 ---
 
-# Local Development
+## Local Development
 
-## Prerequisites
+### Prerequisites
 
-- Git
-- .NET 8 SDK or later
-- Azure CLI
-- an Azure identity authorized to invoke the prototype Document Intelligence resource
+- Git.
+- .NET 8 SDK or later.
+- Azure CLI.
+- An Azure identity authorized to invoke the prototype Document Intelligence resource.
 
 The projects target .NET 8.
 
 Development and benchmark validation were performed using .NET SDK 10.0.300.
 
----
-
-## Clone the Repository
+### Clone the Repository
 
 ```powershell
+# Clone the public source repository.
 git clone https://github.com/rawamba/ttb-ai-label-verification.git
 
+# Enter the repository root.
 cd ttb-ai-label-verification
 ```
 
----
-
-## Authenticate to Azure
+### Authenticate to Azure
 
 ```powershell
+# Authenticate the local developer identity.
 az login
 ```
 
@@ -879,52 +1222,64 @@ The local identity must have permission to invoke Azure Document Intelligence.
 
 The application uses `DefaultAzureCredential`, allowing local development to use supported developer credentials while Azure App Service uses Managed Identity.
 
----
-
-## Configure OCR
+### Configure OCR
 
 ```powershell
+# Configure the Azure Document Intelligence endpoint used by the prototype.
 $env:DocumentIntelligence__Endpoint =
     "https://docintel-ttb-label-verification-iwluomsqzvz26.cognitiveservices.azure.com/"
 
+# Use the Azure Document Intelligence prebuilt read model.
 $env:DocumentIntelligence__ModelId =
     "prebuilt-read"
 
+# Bound first-use Azure credential/token readiness separately from OCR.
+$env:DocumentIntelligence__AuthenticationTimeoutSeconds =
+    "15"
+
+# Keep the latency-sensitive OCR provider operation bounded to five seconds.
 $env:DocumentIntelligence__TimeoutSeconds =
     "5"
 
+# Enable supported font-style evidence used by warning verification.
 $env:DocumentIntelligence__EnableFontStyling =
     "true"
 ```
 
----
-
-## Restore and Build
+### Restore and Build
 
 ```powershell
+# Restore all NuGet dependencies.
 dotnet restore LabelVerification.slnx
 
+# Compile the complete solution in Release configuration.
 dotnet build LabelVerification.slnx `
     --configuration Release
 ```
 
----
-
-## Run Deterministic Tests
+### Run Deterministic Tests
 
 ```powershell
+# Ensure normal validation does not invoke the live external OCR test.
 Remove-Item Env:RUN_LIVE_OCR_TESTS `
     -ErrorAction SilentlyContinue
 
+# Execute the complete deterministic test baseline.
 dotnet test LabelVerification.slnx `
     --configuration Release
 ```
 
----
+Expected baseline:
 
-## Run the Application
+```text
+192 passed
+0 failed
+```
+
+### Run the Application
 
 ```powershell
+# Start the Blazor Server application locally.
 dotnet run `
     --project ".\src\LabelVerification.Web\LabelVerification.Web.csproj"
 ```
@@ -933,42 +1288,69 @@ Use the local URL emitted by ASP.NET Core.
 
 ---
 
-# Reproducing the Performance Benchmark
+## Reproducing Performance Benchmarks
 
 Configure the OCR environment as described above.
 
-Then configure benchmark metadata:
+Then configure optional benchmark metadata:
 
 ```powershell
+# Record Azure region metadata in generated benchmark evidence.
 $env:BENCHMARK_AZURE_REGION =
     "East US 2"
 
+# Record the Document Intelligence service tier.
 $env:BENCHMARK_DOCINTEL_SKU =
     "S0"
 
+# Record where the benchmark client is executing.
 $env:BENCHMARK_LOCATION =
     "Windows 11 developer workstation to Azure Document Intelligence"
 ```
 
-Run:
+### Single-Label Benchmark
 
 ```powershell
+# Run the original single-label warm-state performance benchmark.
 dotnet run `
     --project ".\tools\LabelVerification.Benchmarks\LabelVerification.Benchmarks.csproj" `
     --configuration Release
 ```
 
-The benchmark performs:
+### Batch Benchmark
 
-```text
-5 excluded warm-up observations
-+
-50 measured observations
-=
-55 total OCR attempts
+```powershell
+# Run the live batch-throughput benchmark.
+#
+# Default measurement:
+# - 30 labels per batch
+# - 3 measured batches
+# - maximum concurrency of 3
+# - 15-second authentication-readiness timeout
+# - 5-second OCR provider-operation timeout
+dotnet run `
+    --project ".\tools\LabelVerification.Benchmarks\LabelVerification.Benchmarks.csproj" `
+    --configuration Release `
+    -- batch
 ```
 
-Results are written to:
+Optional batch benchmark overrides:
+
+```powershell
+# Configure labels per measured batch.
+$env:BATCH_BENCHMARK_SIZE =
+    "30"
+
+# Configure the number of measured batches.
+$env:BATCH_BENCHMARK_ITERATIONS =
+    "3"
+
+# Configure bounded worker concurrency.
+$env:BATCH_BENCHMARK_CONCURRENCY =
+    "3"
+```
+
+Results are written under:
 
 ```text
 benchmark-results/
@@ -982,11 +1364,11 @@ The benchmark does not persist:
 
 ---
 
-# CI/CD
+## CI/CD
 
 Azure Pipelines provides continuous integration and deployment.
 
-## Pull Requests
+### Pull Requests
 
 PR validation performs:
 
@@ -1003,9 +1385,9 @@ Deterministic Tests
 Package Validation
 ```
 
-Live OCR is not required for PR success.
+Live OCR and performance benchmarks are not required for PR success.
 
-## Main Branch
+### Main Branch
 
 The main-branch workflow validates the codebase, packages the application, deploys the approved artifact, and performs a health check.
 
@@ -1019,7 +1401,7 @@ The repository uses protected-main development with feature branches and pull re
 
 ---
 
-# Infrastructure as Code
+## Infrastructure as Code
 
 Azure resources are represented through Bicep.
 
@@ -1045,7 +1427,7 @@ This keeps the prototype infrastructure repeatable and reviewable.
 
 ---
 
-# Repository Structure
+## Repository Structure
 
 ```text
 ttb-ai-label-verification/
@@ -1090,9 +1472,9 @@ ttb-ai-label-verification/
 
 ---
 
-# Key Engineering Trade-offs
+## Key Engineering Trade-offs
 
-## Deterministic Rules Over Unrestricted AI Reasoning
+### Deterministic Rules Over Unrestricted AI Reasoning
 
 Objective compliance comparisons are implemented with explicit rules.
 
@@ -1104,47 +1486,77 @@ Benefits include:
 - performance;
 - explainability.
 
----
-
-## Human Review Over Forced Automation
+### Human Review Over Forced Automation
 
 Ambiguous evidence is routed to **REVIEW** rather than forcing an unsupported binary decision.
 
----
+### Reuse Existing Workflow Over Duplicate Batch Rules
 
-## Adapter Boundary Over Simulated COLA Integration
+The batch coordinator delegates every item to the existing single-label workflow.
+
+This avoids:
+
+- divergent verification behavior;
+- duplicate compliance rules;
+- inconsistent telemetry;
+- duplicated workflow logic.
+
+### Bounded Concurrency Over Unrestricted Parallelism
+
+The prototype defaults to three concurrent label verifications.
+
+This keeps batch processing responsive without issuing hundreds of simultaneous OCR requests.
+
+### Separate Authentication Readiness Over Inflating the OCR Timeout
+
+The prototype does not increase the normal five-second OCR provider-operation timeout to hide first-use startup behavior.
+
+Instead, Azure credential readiness is established separately with its own bounded timeout.
+
+This preserves:
+
+- the latency-sensitive OCR operation budget;
+- visibility into startup cost;
+- predictable first-use behavior;
+- reuse of a shared access token by concurrent workers.
+
+### In-Process Batch Coordination Over Distributed Queueing
+
+The evaluator prototype uses bounded in-process batch coordination.
+
+It does **not** implement:
+
+- Azure Service Bus;
+- durable background jobs;
+- persistent batch state;
+- scheduled processing;
+- email completion notifications.
+
+Those are production-scaling concerns rather than requirements for the evaluator prototype.
+
+### Temporary Staging Over Concurrent Browser Streams
+
+Blazor Server browser file streams are staged to temporary server files before concurrent processing.
+
+This provides ordinary server-side file streams to batch workers.
+
+Temporary files are deleted after processing.
+
+### Adapter Boundary Over Simulated COLA Integration
 
 The prototype models only the application data required for verification rather than inventing a production COLA API.
 
----
-
-## Managed Identity Over API Keys
+### Managed Identity Over API Keys
 
 Azure-hosted OCR access uses Managed Identity and scoped RBAC rather than embedded Cognitive Services credentials.
 
----
+### Measured Performance Over Assumed Performance
 
-## Measured Performance Over Assumed Performance
-
-Pipeline instrumentation and a repeatable benchmark harness measure latency empirically.
+Pipeline instrumentation and repeatable single-label and batch benchmark harnesses measure latency empirically.
 
 ---
 
-## Controlled Azure Dependency Over Unrestricted Network Dependencies
-
-The application uses a defined server-side Azure OCR boundary rather than requiring browser clients to access arbitrary external services.
-
-The architecture supports tighter production network controls without changing the verification engine.
-
----
-
-## Working Core Over Broad Regulatory Coverage
-
-The prototype prioritizes a coherent, tested end-to-end workflow over incomplete implementation of every possible beverage-specific labeling requirement.
-
----
-
-# Known Limitations
+## Known Limitations
 
 The prototype intentionally documents its boundaries.
 
@@ -1153,19 +1565,21 @@ Current limitations include:
 - class/type is extracted and parsed but is **not yet included in the automated result aggregate**;
 - no direct production COLA integration;
 - no production federal identity / SSO integration;
-- no batch-upload UI;
+- batch processing is in-process and request-scoped rather than durable;
+- a process restart or lost interactive session does not preserve an in-flight batch job;
+- batch upload staging uses temporary local server storage rather than production object storage;
 - no long-term document persistence;
 - no complete beverage-specific regulatory coverage;
 - typography validation is limited to evidence exposed by the OCR provider;
-- browser-to-server latency is not represented in Application-layer benchmark measurements;
-- first-use OCR-path latency can exceed the five-second timeout;
+- browser upload time is not represented in Application-layer or batch service-throughput measurements;
+- first-use end-to-end startup can be slower than steady-state processing even though authentication readiness and OCR execution have separate bounded timeouts;
 - no autonomous final regulatory adjudication.
 
 These are explicit engineering boundaries rather than hidden assumptions.
 
 ---
 
-# Production Evolution
+## Production Evolution
 
 A production implementation could evolve incrementally without replacing the core deterministic verification engine.
 
@@ -1177,7 +1591,8 @@ Potential next capabilities include:
 - private DNS and VNet integration;
 - durable batch queues;
 - secure temporary object storage;
-- horizontal scaling;
+- persistent batch job state;
+- horizontal worker scaling;
 - richer image preprocessing;
 - versioned regulatory rules;
 - audit history;
@@ -1199,7 +1614,7 @@ flowchart TD
 
 ---
 
-# Assumptions
+## Assumptions
 
 The prototype assumes:
 
@@ -1208,11 +1623,12 @@ The prototype assumes:
 3. Government Warning requirements come from the regulatory rule set rather than the individual application record.
 4. OCR is evidence extraction, not final compliance authority.
 5. Ambiguous automation outcomes should be reviewed by a human.
-6. Production security, retention, network, identity, and authorization requirements would be implemented before operational use.
+6. Batch items in the evaluator prototype share the selected application record.
+7. Production security, retention, network, identity, authorization, and durable-processing requirements would be implemented before operational use.
 
 ---
 
-# Regulatory Scope
+## Regulatory Scope
 
 The prototype implements a bounded subset of alcohol-label verification behavior informed by TTB labeling requirements.
 
@@ -1232,7 +1648,7 @@ For production use, regulatory rules should be:
 
 ---
 
-# Final Design Principle
+## Final Design Principle
 
 ```text
 AI for perception.

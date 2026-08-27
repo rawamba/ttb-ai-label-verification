@@ -8,6 +8,8 @@ using LabelVerification.Application.Verification.Normalization;
 using LabelVerification.Application.Verification.Workflow;
 using LabelVerification.Application.Verification;
 using Microsoft.Extensions.DependencyInjection;
+using LabelVerification.Application.Verification.Batch;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace LabelVerification.Application;
 
@@ -81,12 +83,27 @@ public static class DependencyInjection
             ILabelVerificationService,
             LabelVerificationService>();
 
+        // Provide conservative defaults for hosts that do not explicitly
+        // configure batch processing, including tests and benchmarks.
+        //
+        // A composition root may register BatchVerificationOptions before calling
+        // AddApplication() to override these defaults.
+        services.TryAddSingleton(
+            new BatchVerificationOptions());
+
+        // Coordinate multiple independent label-verification operations using
+        // bounded concurrency while reusing the existing single-label workflow.
+        services.AddTransient<
+            IBatchLabelVerificationService,
+            BatchLabelVerificationService>();
+
         // Aggregate field-level PASS / REVIEW / FAIL checks into the overall
         // deterministic verification result.
         services.AddSingleton<
             IVerificationResultAggregator,
             VerificationResultAggregator>();
 
+       
         return services;
     }
 }

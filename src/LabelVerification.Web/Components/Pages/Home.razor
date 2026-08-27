@@ -7,6 +7,7 @@
 @using LabelVerification.Application.Verification
 @using LabelVerification.Application.Verification.Workflow
 @using LabelVerification.Web.Components.Verification
+@using LabelVerification.Web.Components.Batch
 
 @inject ILabelVerificationService LabelVerificationService
 @inject ILogger<Home> Logger
@@ -23,10 +24,250 @@
                 </h1>
 
                 <p class="text-secondary mb-0">
-                    Select an application, upload a label image, and compare
-                    extracted label evidence with the expected application data.
+                    Select an application, upload label evidence, and compare
+                    extracted information with the expected application data.
                 </p>
             </header>
+
+            @* ============================================================
+               VERIFICATION MODE
+               Designed for clear, low-friction mode selection.
+               ============================================================ *@
+
+            <section class="mb-4"
+                     aria-labelledby="verification-mode-heading">
+
+                <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+
+                    <div>
+                        <div class="text-uppercase fw-semibold text-primary small mb-1">
+                            Verification mode
+                        </div>
+
+                        <h2 id="verification-mode-heading"
+                            class="h4 mb-1">
+                            How would you like to verify labels?
+                        </h2>
+
+                        <p class="text-secondary mb-0">
+                            Choose the option that matches the work you need to do.
+                        </p>
+                    </div>
+
+                    <button type="button"
+                            class="btn btn-outline-secondary rounded-circle d-inline-flex align-items-center justify-content-center flex-shrink-0"
+                            style="width: 2.25rem; height: 2.25rem;"
+                            title="Single label verifies one image at a time. Batch upload lets you select multiple labels and review the results together."
+                            aria-label="Help choosing a verification mode">
+                        <span class="fw-bold"
+                              aria-hidden="true">
+                            ?
+                        </span>
+                    </button>
+
+                </div>
+
+                <div class="row g-3"
+                     role="group"
+                     aria-label="Verification mode">
+
+                    <div class="col-12 col-md-6">
+
+                        <button type="button"
+                                class="@GetModeButtonClass(
+                                                                    VerificationMode.Single)"
+                                aria-pressed="@(
+                                _verificationMode ==
+                                VerificationMode.Single)"
+                                disabled="@_isProcessing"
+                                @onclick="() => SetVerificationMode(
+                                                                    VerificationMode.Single)">
+
+<span class="@GetModeIconContainerClass(
+                                                                  VerificationMode.Single)"
+                                  aria-hidden="true">
+
+                                <svg xmlns="http://www.w3.org/2000/svg"
+                                     width="24"
+                                     height="24"
+                                     viewBox="0 0 24 24"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     stroke-width="2"
+                                     stroke-linecap="round"
+                                     stroke-linejoin="round">
+
+                                    <rect x="4"
+                                          y="3"
+                                          width="16"
+                                          height="18"
+                                          rx="2" />
+
+                                    <path d="M8 8h8" />
+                                    <path d="M8 12h8" />
+                                    <path d="M8 16h5" />
+
+                                </svg>
+
+                            </span>
+
+                            <span class="text-start flex-grow-1">
+
+                                <span class="d-block fw-bold fs-6">
+                                    Single label
+                                </span>
+
+                                <span class="@GetModeDescriptionClass(
+                                                                          VerificationMode.Single)">
+                                    Verify one label image
+                                </span>
+
+                            </span>
+
+                            @if (_verificationMode ==
+                                 VerificationMode.Single)
+                            {
+                                <span class="ms-auto"
+                                      aria-hidden="true">
+
+                                    <svg xmlns="http://www.w3.org/2000/svg"
+                                         width="20"
+                                         height="20"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="2.5"
+                                         stroke-linecap="round"
+                                         stroke-linejoin="round">
+
+                                        <path d="m5 12 4 4L19 6" />
+
+                                    </svg>
+
+                                </span>
+                            }
+
+                        </button>
+
+                    </div>
+
+                    <div class="col-12 col-md-6">
+
+                        <button type="button"
+                                class="@GetModeButtonClass(
+                                                                    VerificationMode.Batch)"
+                                aria-pressed="@(
+                                _verificationMode ==
+                                VerificationMode.Batch)"
+                                disabled="@_isProcessing"
+                                @onclick="() => SetVerificationMode(
+                                                                    VerificationMode.Batch)">
+
+<span class="@GetModeIconContainerClass(
+                                                                  VerificationMode.Batch)"
+                                  aria-hidden="true">
+
+                                <svg xmlns="http://www.w3.org/2000/svg"
+                                     width="24"
+                                     height="24"
+                                     viewBox="0 0 24 24"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     stroke-width="2"
+                                     stroke-linecap="round"
+                                     stroke-linejoin="round">
+
+                                    <rect x="3"
+                                          y="3"
+                                          width="7"
+                                          height="7"
+                                          rx="1" />
+
+                                    <rect x="14"
+                                          y="3"
+                                          width="7"
+                                          height="7"
+                                          rx="1" />
+
+                                    <rect x="3"
+                                          y="14"
+                                          width="7"
+                                          height="7"
+                                          rx="1" />
+
+                                    <rect x="14"
+                                          y="14"
+                                          width="7"
+                                          height="7"
+                                          rx="1" />
+
+                                </svg>
+
+                            </span>
+
+                            <span class="text-start flex-grow-1">
+
+                                <span class="d-block fw-bold fs-6">
+                                    Batch upload
+                                </span>
+
+                                <span class="@GetModeDescriptionClass(
+                                                                          VerificationMode.Batch)">
+                                    Verify multiple labels together
+                                </span>
+
+                            </span>
+
+                            @if (_verificationMode ==
+                                 VerificationMode.Batch)
+                            {
+                                <span class="ms-auto"
+                                      aria-hidden="true">
+
+                                    <svg xmlns="http://www.w3.org/2000/svg"
+                                         width="20"
+                                         height="20"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="2.5"
+                                         stroke-linecap="round"
+                                         stroke-linejoin="round">
+
+                                        <path d="m5 12 4 4L19 6" />
+
+                                    </svg>
+
+                                </span>
+                            }
+
+                        </button>
+
+                    </div>
+
+                </div>
+
+                <div class="form-text mt-2">
+                    <span class="fw-semibold">
+                        Tip:
+                    </span>
+
+                    Use
+                    <span class="text-primary fw-semibold">
+                        Single label
+                    </span>
+                    for one image, or
+                    <span class="text-success fw-semibold">
+                        Batch upload
+                    </span>
+                    when reviewing several labels from the same application.
+                </div>
+
+            </section>
+
+            @* ============================================================
+               SHARED APPLICATION SELECTION
+               ============================================================ *@
 
             <div class="card shadow-sm">
                 <div class="card-body p-4">
@@ -61,195 +302,215 @@
                         </div>
                     </div>
 
-                    <div class="mb-4">
-                        <label class="form-label fw-semibold">
-                            2. Label image
-                        </label>
+                    @* ====================================================
+                       SINGLE-LABEL MODE
+                       ==================================================== *@
 
-                        <InputFile OnChange="OnFileSelected"
-                                   accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                                   class="form-control form-control-lg"
-                                   disabled="@_isProcessing" />
-
-                        <div class="form-text">
-                            Supported formats: JPEG, PNG, and WebP.
-                            Maximum upload size: 10 MB.
-                        </div>
-
-                        @if (_selectedFile is not null)
-                        {
-                            <div class="mt-2 small">
-                                <span class="fw-semibold">
-                                    Selected:
-                                </span>
-
-                                @_selectedFile.Name
-
-                                <span class="text-secondary">
-                                    (@FormatFileSize(_selectedFile.Size))
-                                </span>
-                            </div>
-                        }
-                    </div>
-
-                    @if (!string.IsNullOrWhiteSpace(_validationError))
+                    @if (_verificationMode ==
+                         VerificationMode.Single)
                     {
-                        <div class="alert alert-danger"
-                             role="alert">
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">
+                                2. Label image
+                            </label>
 
-                            <strong>
-                                Unable to verify this label.
-                            </strong>
+                            <InputFile OnChange="OnFileSelected"
+                                       accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                                       class="form-control form-control-lg"
+                                       disabled="@_isProcessing" />
 
-                            <div class="mt-1">
-                                @_validationError
+                            <div class="form-text">
+                                Supported formats: JPEG, PNG, and WebP.
+                                Maximum upload size: 10 MB.
                             </div>
-                        </div>
-                    }
 
-                    <div class="d-grid d-sm-flex gap-2">
-
-                        <button type="button"
-                                class="btn btn-primary btn-lg px-4"
-                                disabled="@(!CanVerify)"
-                                @onclick="VerifyAsync">
-
-                            @if (_isProcessing)
+                            @if (_selectedFile is not null)
                             {
-                                <span class="spinner-border spinner-border-sm me-2"
-                                      aria-hidden="true">
-                                </span>
-
-                                <span>
-                                    Verifying...
-                                </span>
-                            }
-                            else
-                            {
-                                <span>
-                                    Verify label
-                                </span>
-                            }
-
-                        </button>
-
-                        @if (_selectedFile is not null &&
-                             !_isProcessing)
-                        {
-                            <button type="button"
-                                    class="btn btn-outline-secondary btn-lg"
-                                    @onclick="ClearSelection">
-                                Clear
-                            </button>
-                        }
-
-                    </div>
-
-                    @if (_isProcessing)
-                    {
-                        <div class="alert alert-info mt-4 mb-0"
-                             role="status"
-                             aria-live="polite">
-
-                            <div class="fw-semibold">
-                                Processing label
-                            </div>
-
-                            <div>
-                                The image is being validated, read by OCR,
-                                parsed, and compared with the application.
-                                This normally takes a few seconds.
-                            </div>
-                        </div>
-                    }
-
-                    @if (_submissionResult is not null &&
-                         _submissionResult.ProcessingSucceeded &&
-                         _submissionResult.Verification is not null)
-                    {
-                        var verification =
-                            _submissionResult.Verification;
-
-                        <div class="@GetOverallResultCss(
-                                        verification.OverallStatus)"
-                             role="status"
-                             aria-live="polite">
-
-                            <div class="fw-semibold">
-                                Automated verification status:
-                                @FormatStatus(
-                                    verification.OverallStatus)
-                            </div>
-
-                            <div class="mt-1">
-                                @verification.PassCount passed,
-                                @verification.ReviewCount review,
-                                @verification.FailCount failed.
-                            </div>
-
-                            @if (_submissionResult.Telemetry is not null)
-                            {
-                                var telemetry =
-                                    _submissionResult.Telemetry;
-
                                 <div class="mt-2 small">
-
                                     <span class="fw-semibold">
-                                        Total:
+                                        Selected:
                                     </span>
 
-                                    @FormatDuration(
-                                        telemetry.TotalDuration)
+                                    @_selectedFile.Name
 
-                                    @if (telemetry.OcrDuration is not null)
-                                    {
-                                        <span class="ms-3">
-
-                                            <span class="fw-semibold">
-                                                OCR:
-                                            </span>
-
-                                            @FormatDuration(
-                                                telemetry.OcrDuration.Value)
-
-                                        </span>
-                                    }
-
-                                    @if (telemetry.VerificationDuration is not null)
-                                    {
-                                        <span class="ms-3">
-
-                                            <span class="fw-semibold">
-                                                Verification:
-                                            </span>
-
-                                            @FormatDuration(
-                                                telemetry.VerificationDuration.Value)
-
-                                        </span>
-                                    }
-
-                                </div>
-                            }
-
-                            @if (verification.OverallStatus ==
-                                 VerificationStatus.Review)
-                            {
-                                <div class="mt-3 small">
-                                    One or more fields contain ambiguous or
-                                    insufficient evidence. Review the flagged
-                                    fields below before making the final
-                                    compliance determination.
+                                    <span class="text-secondary">
+                                        (@FormatFileSize(
+                                                                                    _selectedFile.Size))
+                                    </span>
                                 </div>
                             }
                         </div>
 
-                        <VerificationCheckList
-                            Verification="verification" />
+                        @if (!string.IsNullOrWhiteSpace(
+                                 _validationError))
+                        {
+                            <div class="alert alert-danger"
+                                 role="alert">
+
+                                <strong>
+                                    Unable to verify this label.
+                                </strong>
+
+                                <div class="mt-1">
+                                    @_validationError
+                                </div>
+                            </div>
+                        }
+
+                        <div class="d-grid d-sm-flex gap-2">
+
+                            <button type="button"
+                                    class="btn btn-primary btn-lg px-4"
+                                    disabled="@(!CanVerify)"
+                                    @onclick="VerifyAsync">
+
+                                @if (_isProcessing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"
+                                          aria-hidden="true">
+                                    </span>
+
+                                    <span>
+                                        Verifying...
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span>
+                                        Verify label
+                                    </span>
+                                }
+
+                            </button>
+
+                            @if (_selectedFile is not null &&
+                                 !_isProcessing)
+                            {
+                                <button type="button"
+                                        class="btn btn-outline-secondary btn-lg"
+                                        @onclick="ClearSelection">
+                                    Clear
+                                </button>
+                            }
+
+                        </div>
+
+                        @if (_isProcessing)
+                        {
+                            <div class="alert alert-info mt-4 mb-0"
+                                 role="status"
+                                 aria-live="polite">
+
+                                <div class="fw-semibold">
+                                    Processing label
+                                </div>
+
+                                <div>
+                                    The image is being validated, read by OCR,
+                                    parsed, and compared with the application.
+                                    This normally takes a few seconds.
+                                </div>
+                            </div>
+                        }
+
+                        @if (_submissionResult is not null &&
+                             _submissionResult.ProcessingSucceeded &&
+                             _submissionResult.Verification is not null)
+                        {
+                            var verification =
+                                _submissionResult.Verification;
+
+                            <div class="@GetOverallResultCss(
+                                                                 verification.OverallStatus)"
+                                 role="status"
+                                 aria-live="polite">
+
+                                <div class="fw-semibold">
+                                    Automated verification status:
+                                    @FormatStatus(
+                                        verification.OverallStatus)
+                                </div>
+
+                                <div class="mt-1">
+                                    @verification.PassCount passed,
+                                    @verification.ReviewCount review,
+                                    @verification.FailCount failed.
+                                </div>
+
+                                @if (_submissionResult.Telemetry is not null)
+                                {
+                                    var telemetry =
+                                        _submissionResult.Telemetry;
+
+                                    <div class="mt-2 small">
+
+                                        <span class="fw-semibold">
+                                            Total:
+                                        </span>
+
+                                        @FormatDuration(
+                                            telemetry.TotalDuration)
+
+                                        @if (telemetry.OcrDuration is not null)
+                                        {
+                                            <span class="ms-3">
+
+                                                <span class="fw-semibold">
+                                                    OCR:
+                                                </span>
+
+                                                @FormatDuration(
+                                                    telemetry.OcrDuration.Value)
+
+                                            </span>
+                                        }
+
+                                        @if (telemetry.VerificationDuration
+                                             is not null)
+                                        {
+                                            <span class="ms-3">
+
+                                                <span class="fw-semibold">
+                                                    Verification:
+                                                </span>
+
+                                                @FormatDuration(
+                                                    telemetry
+                                                        .VerificationDuration
+                                                        .Value)
+
+                                            </span>
+                                        }
+
+                                    </div>
+                                }
+
+                                @if (verification.OverallStatus ==
+                                     VerificationStatus.Review)
+                                {
+                                    <div class="mt-3 small">
+                                        One or more fields contain ambiguous or
+                                        insufficient evidence. Review the flagged
+                                        fields below before making the final
+                                        compliance determination.
+                                    </div>
+                                }
+                            </div>
+
+                            <VerificationCheckList Verification="verification" />
+                        }
+                    }
+                    else
+                    {
+                        <BatchVerificationShell ApplicationId="@_selectedApplicationId" />
                     }
 
                 </div>
             </div>
+
+            @* ============================================================
+               HUMAN AUTHORITY
+               ============================================================ *@
 
             <div class="border rounded bg-body-tertiary p-3 mt-3 small">
 
@@ -271,15 +532,9 @@
 </div>
 
 @code {
-    // Browser-side upload limit mirrors the Application-layer ingestion policy.
-    // Application validation remains authoritative for content type, signature,
-    // file size, and other deterministic checks.
     private const long MaxUploadBytes =
         10L * 1024L * 1024L;
 
-    // The prototype currently exposes a known mock COLA application.
-    // A production implementation can replace this list with upstream
-    // COLA-backed search or application lookup.
     private static readonly IReadOnlyList<ApplicationOption>
         ApplicationOptions =
         [
@@ -300,6 +555,9 @@
     private LabelVerificationSubmissionResult?
         _submissionResult;
 
+    private VerificationMode _verificationMode =
+        VerificationMode.Single;
+
     private bool CanVerify =>
         !_isProcessing &&
         !string.IsNullOrWhiteSpace(
@@ -308,18 +566,80 @@
         string.IsNullOrWhiteSpace(
             _validationError);
 
+    private void SetVerificationMode(
+        VerificationMode mode)
+    {
+        _verificationMode =
+            mode;
+    }
+
+    private string GetModeButtonClass(
+        VerificationMode mode)
+    {
+        const string baseClasses =
+            "btn w-100 d-flex align-items-center gap-3 p-3 " +
+            "rounded-3 text-start shadow-sm";
+
+        if (mode ==
+            VerificationMode.Single)
+        {
+            return _verificationMode ==
+                   VerificationMode.Single
+                ? $"{baseClasses} btn-primary"
+                : $"{baseClasses} btn-outline-primary bg-white";
+        }
+
+        return _verificationMode ==
+               VerificationMode.Batch
+            ? $"{baseClasses} btn-success"
+            : $"{baseClasses} btn-outline-success bg-white";
+    }
+
+    private string GetModeIconContainerClass(
+        VerificationMode mode)
+    {
+        var isSelected =
+            _verificationMode ==
+            mode;
+
+        if (isSelected)
+        {
+            return
+                "d-inline-flex align-items-center justify-content-center " +
+                "rounded-circle bg-white bg-opacity-25 flex-shrink-0 " +
+                "p-2";
+        }
+
+        return
+            "d-inline-flex align-items-center justify-content-center " +
+            "rounded-circle bg-body-tertiary flex-shrink-0 p-2";
+    }
+
+    private string GetModeDescriptionClass(
+        VerificationMode mode)
+    {
+        return _verificationMode ==
+               mode
+            ? "d-block small opacity-75 mt-1"
+            : "d-block small text-secondary mt-1";
+    }
+
     private void OnFileSelected(
         InputFileChangeEventArgs args)
     {
-        _submissionResult = null;
-        _validationError = null;
+        _submissionResult =
+            null;
+
+        _validationError =
+            null;
 
         var file =
             args.File;
 
         if (file.Size <= 0)
         {
-            _selectedFile = null;
+            _selectedFile =
+                null;
 
             _validationError =
                 "The selected file is empty.";
@@ -327,9 +647,11 @@
             return;
         }
 
-        if (file.Size > MaxUploadBytes)
+        if (file.Size >
+            MaxUploadBytes)
         {
-            _selectedFile = null;
+            _selectedFile =
+                null;
 
             _validationError =
                 $"The selected file is too large. " +
@@ -349,8 +671,11 @@
             return;
         }
 
-        _submissionResult = null;
-        _validationError = null;
+        _submissionResult =
+            null;
+
+        _validationError =
+            null;
 
         if (string.IsNullOrWhiteSpace(
                 _selectedApplicationId))
@@ -369,7 +694,8 @@
             return;
         }
 
-        _isProcessing = true;
+        _isProcessing =
+            true;
 
         try
         {
@@ -433,8 +759,6 @@
         }
         catch (Exception exception)
         {
-            // Do not expose Azure implementation details or stack traces
-            // through the user interface. Detailed diagnostics remain in logs.
             Logger.LogError(
                 exception,
                 "Unexpected label verification failure for application {ApplicationId}.",
@@ -445,15 +769,21 @@
         }
         finally
         {
-            _isProcessing = false;
+            _isProcessing =
+                false;
         }
     }
 
     private void ClearSelection()
     {
-        _selectedFile = null;
-        _submissionResult = null;
-        _validationError = null;
+        _selectedFile =
+            null;
+
+        _submissionResult =
+            null;
+
+        _validationError =
+            null;
     }
 
     private static string FormatStatus(
@@ -522,13 +852,15 @@
         const decimal bytesPerMegabyte =
             1024m * 1024m;
 
-        if (bytes >= bytesPerMegabyte)
+        if (bytes >=
+            bytesPerMegabyte)
         {
             return
                 $"{bytes / bytesPerMegabyte:0.##} MB";
         }
 
-        if (bytes >= bytesPerKilobyte)
+        if (bytes >=
+            bytesPerKilobyte)
         {
             return
                 $"{bytes / bytesPerKilobyte:0.##} KB";
@@ -536,6 +868,12 @@
 
         return
             $"{bytes} bytes";
+    }
+
+    private enum VerificationMode
+    {
+        Single,
+        Batch
     }
 
     private sealed record ApplicationOption(

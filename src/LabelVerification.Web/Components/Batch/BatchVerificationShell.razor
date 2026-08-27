@@ -1,0 +1,1876 @@
+﻿@using LabelVerification.Application.Verification
+@using LabelVerification.Application.Verification.Batch
+@using LabelVerification.Web.Components.Verification
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.Extensions.Logging
+
+@inject IBatchLabelVerificationService BatchVerificationService
+@inject BatchVerificationOptions BatchOptions
+@inject ILogger<BatchVerificationShell> Logger
+
+<section class="batch-workspace"
+         aria-labelledby="batch-heading">
+
+    <div class="batch-intro">
+        <div>
+            <p class="batch-eyebrow">
+                BATCH VERIFICATION
+            </p>
+
+            <h2 id="batch-heading">
+                Verify multiple labels
+            </h2>
+
+            <p class="batch-lead">
+                Upload multiple label images and review them as one batch.
+                Each label is processed independently so one technical problem
+                does not stop the remaining files.
+            </p>
+        </div>
+
+        <div class="help-wrap">
+            <button type="button"
+                    class="help-button"
+                    aria-label="About batch verification"
+                    title="Up to @BatchOptions.MaxBatchSize labels may be selected. Processing uses bounded concurrency so the OCR service is not flooded.">
+                ?
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_selectionError))
+    {
+        <div class="alert alert-warning"
+             role="alert">
+            @_selectionError
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(_batchError))
+    {
+        <div class="alert alert-danger"
+             role="alert">
+            @_batchError
+        </div>
+    }
+
+    <!-- STEP 2 — LABEL SELECTION -->
+
+    <section class="workflow-card"
+             aria-labelledby="batch-upload-heading">
+
+        <div class="section-heading-row">
+            <div class="step-number"
+                 aria-hidden="true">
+                2
+            </div>
+
+            <div>
+                <h3 id="batch-upload-heading">
+                    Add label images
+                </h3>
+
+                <p>
+                    Select up to @BatchOptions.MaxBatchSize label images.
+                </p>
+            </div>
+
+            <button type="button"
+                    class="help-button help-button-small"
+                    aria-label="Help with batch uploads"
+                    title="Each image is still validated by the existing server-side image-validation workflow before OCR.">
+                ?
+            </button>
+        </div>
+
+        <label class="batch-drop-zone"
+               for="batch-file-input">
+
+            <span class="upload-icon"
+                  aria-hidden="true">
+                ↑
+            </span>
+
+            <span class="upload-title">
+                Choose label images
+            </span>
+
+            <span class="upload-subtitle">
+                Select multiple files from your computer
+            </span>
+
+            <span class="upload-requirements">
+                PNG, JPG/JPEG or WebP · maximum
+                @FormatFileSize(MaxUploadBytes) per label
+            </span>
+        </label>
+
+        <InputFile id="batch-file-input"
+                   class="visually-hidden"
+                   OnChange="HandleFilesSelected"
+                   accept="image/png,image/jpeg,image/webp"
+                   multiple
+                   disabled="@_isProcessing" />
+
+        <div class="batch-upload-actions">
+
+            <label for="batch-file-input"
+                   class="btn btn-primary batch-browse-button">
+                Browse files
+            </label>
+
+            @if (_items.Count > 0)
+            {
+                <button type="button"
+                        class="btn btn-outline-secondary"
+                        disabled="@_isProcessing"
+                        @onclick="ClearFiles">
+                    Clear files
+                </button>
+            }
+        </div>
+
+        <div class="selection-summary"
+             aria-live="polite">
+
+            <div class="selection-stat">
+                <span class="selection-value">
+                    @_items.Count
+                </span>
+
+                <span class="selection-label">
+                    Selected
+                </span>
+            </div>
+
+            <div class="selection-stat selection-stat-success">
+                <span class="selection-value">
+                    @_items.Count
+                </span>
+
+                <span class="selection-label">
+                    Ready
+                </span>
+            </div>
+
+            <div class="selection-stat selection-stat-error">
+                <span class="selection-value">
+                    0
+                </span>
+
+                <span class="selection-label">
+                    Needs attention
+                </span>
+            </div>
+        </div>
+    </section>
+
+    <!-- STEP 3 — SELECTED FILES -->
+
+    <section class="workflow-card"
+             aria-labelledby="selected-files-heading">
+
+        <div class="section-heading-row">
+            <div class="step-number"
+                 aria-hidden="true">
+                3
+            </div>
+
+            <div>
+                <h3 id="selected-files-heading">
+                    Review selected files
+                </h3>
+
+                <p>
+                    Check the files before starting verification.
+                </p>
+            </div>
+        </div>
+
+        @if (_items.Count == 0)
+        {
+            <div class="empty-state">
+                <div class="empty-state-icon"
+                     aria-hidden="true">
+                    ⧉
+                </div>
+
+                <strong>
+                    No labels selected yet
+                </strong>
+
+                <span>
+                    Choose label images above and they will appear here.
+                </span>
+            </div>
+        }
+        else
+        {
+            <div class="selected-file-list">
+
+                @for (var index = 0;
+                      index < _items.Count;
+                      index++)
+                {
+                    var item =
+                        _items[index];
+
+                    <article class="selected-file-row">
+
+                        <div class="file-index">
+                            @(index + 1)
+                        </div>
+
+                        <div class="file-main">
+                            <strong class="file-name">
+                                @item.File.Name
+                            </strong>
+
+                            <span class="file-meta">
+                                @FormatFileSize(item.File.Size)
+                                ·
+                                @DisplayContentType(item.File.ContentType)
+                            </span>
+                        </div>
+
+                        <span class="@GetProcessingBadgeClass(item)">
+                            @GetProcessingText(item)
+                        </span>
+
+                        <button type="button"
+                                class="remove-file-button"
+                                disabled="@_isProcessing"
+                                aria-label="@($"Remove {item.File.Name}")"
+                                title="Remove this file"
+                                @onclick="() => RemoveFile(item)">
+                            ×
+                        </button>
+
+                    </article>
+                }
+            </div>
+        }
+    </section>
+
+    <!-- STEP 4 — LIVE BATCH SUMMARY -->
+
+    <section class="workflow-card"
+             aria-labelledby="batch-summary-heading">
+
+        <div class="section-heading-row">
+
+            <div class="step-number"
+                 aria-hidden="true">
+                4
+            </div>
+
+            <div>
+                <h3 id="batch-summary-heading">
+                    Batch summary
+                </h3>
+
+                <p>
+                    Regulatory results and technical errors are reported
+                    separately.
+                </p>
+            </div>
+
+            <button type="button"
+                    class="help-button help-button-small"
+                    aria-label="Help with batch summary"
+                    title="PASS, REVIEW and FAIL are verification outcomes. ERROR means a technical processing problem occurred and is not itself a regulatory failure.">
+                ?
+            </button>
+
+        </div>
+
+        <div class="summary-grid">
+
+            <div class="summary-card summary-total">
+                <span class="summary-value">
+                    @_items.Count
+                </span>
+
+                <span class="summary-label">
+                    Total labels
+                </span>
+            </div>
+
+            <div class="summary-card summary-pass">
+                <span class="summary-value">
+                    @PassCount
+                </span>
+
+                <span class="summary-label">
+                    PASS
+                </span>
+            </div>
+
+            <div class="summary-card summary-review">
+                <span class="summary-value">
+                    @ReviewCount
+                </span>
+
+                <span class="summary-label">
+                    REVIEW
+                </span>
+            </div>
+
+            <div class="summary-card summary-fail">
+                <span class="summary-value">
+                    @FailCount
+                </span>
+
+                <span class="summary-label">
+                    FAIL
+                </span>
+            </div>
+
+            <div class="summary-card summary-error">
+                <span class="summary-value">
+                    @ErrorCount
+                </span>
+
+                <span class="summary-label">
+                    ERROR
+                </span>
+            </div>
+
+        </div>
+
+        <div class="progress-shell"
+             aria-label="Batch verification progress">
+
+            <div class="progress-heading">
+                <span>
+                    @ProgressText
+                </span>
+
+                <span>
+                    @($"{ProgressPercent:N0}%")
+                </span>
+            </div>
+
+            <div class="progress-track">
+                <div class="progress-fill"
+                     style="@($"width: {ProgressPercent:N0}%")">
+                </div>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(BatchCorrelationId))
+        {
+            <div class="small text-secondary mt-2">
+                Batch correlation:
+                <code>@BatchCorrelationId</code>
+            </div>
+        }
+
+        <div class="batch-primary-action">
+
+            <button type="button"
+                    class="btn btn-primary btn-lg"
+                    disabled="@(!CanVerify)"
+                    @onclick="VerifyBatchAsync">
+                @(_isProcessing
+                    ? "Verifying labels..."
+                    : "Verify batch")
+            </button>
+
+            @if (_isProcessing)
+            {
+                <button type="button"
+                        class="btn btn-outline-secondary"
+                        @onclick="CancelBatch">
+                    Cancel
+                </button>
+            }
+
+            <span class="action-help">
+                Maximum @BatchOptions.MaxConcurrency labels are processed
+                concurrently.
+            </span>
+
+        </div>
+
+    </section>
+
+    <!-- STEP 5 — LIVE RESULTS -->
+
+    <section class="workflow-card"
+             aria-labelledby="batch-results-heading">
+
+        <div class="section-heading-row results-heading-row">
+
+            <div class="step-number"
+                 aria-hidden="true">
+                5
+            </div>
+
+            <div class="section-heading-grow">
+
+                <h3 id="batch-results-heading">
+                    Verification results
+                </h3>
+
+                <p>
+                    Results appear as individual labels finish. Open a label
+                    to review the same field-level evidence used by the
+                    single-label workflow.
+                </p>
+
+            </div>
+
+            <button type="button"
+                    class="help-button help-button-small"
+                    aria-label="Help with verification results"
+                    title="REVIEW means human judgment is required. ERROR identifies a technical problem and is separate from regulatory status.">
+                ?
+            </button>
+
+        </div>
+
+        <div class="results-toolbar">
+
+            <div class="filter-group"
+                 role="group"
+                 aria-label="Filter results by status">
+
+                <button type="button"
+                        class="@GetFilterButtonClass(ResultFilter.All)"
+                        @onclick="() => SetFilter(ResultFilter.All)">
+                    All
+                    <span>@_items.Count</span>
+                </button>
+
+                <button type="button"
+                        class="@GetFilterButtonClass(ResultFilter.Pass)"
+                        @onclick="() => SetFilter(ResultFilter.Pass)">
+                    PASS
+                    <span>@PassCount</span>
+                </button>
+
+                <button type="button"
+                        class="@GetFilterButtonClass(ResultFilter.Review)"
+                        @onclick="() => SetFilter(ResultFilter.Review)">
+                    REVIEW
+                    <span>@ReviewCount</span>
+                </button>
+
+                <button type="button"
+                        class="@GetFilterButtonClass(ResultFilter.Fail)"
+                        @onclick="() => SetFilter(ResultFilter.Fail)">
+                    FAIL
+                    <span>@FailCount</span>
+                </button>
+
+                <button type="button"
+                        class="@GetFilterButtonClass(ResultFilter.Error)"
+                        @onclick="() => SetFilter(ResultFilter.Error)">
+                    ERROR
+                    <span>@ErrorCount</span>
+                </button>
+
+            </div>
+
+            <label class="results-search">
+
+                <span class="visually-hidden">
+                    Search batch results
+                </span>
+
+                <input type="search"
+                       placeholder="Search labels"
+                       @bind="_searchText"
+                       @bind:event="oninput"
+                       disabled="@(_items.Count == 0)" />
+
+            </label>
+
+        </div>
+
+        <div class="table-responsive batch-table-wrap">
+
+            <table class="table batch-results-table align-middle">
+
+                <thead>
+                    <tr>
+                        <th scope="col">
+                            Label
+                        </th>
+
+                        <th scope="col">
+                            Processing
+                        </th>
+
+                        <th scope="col">
+                            Result
+                        </th>
+
+                        <th scope="col"
+                            class="text-center">
+
+                            <span class="d-inline-flex align-items-center gap-1">
+
+                                <svg xmlns="http://www.w3.org/2000/svg"
+                                     width="16"
+                                     height="16"
+                                     viewBox="0 0 24 24"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     stroke-width="2.5"
+                                     stroke-linecap="round"
+                                     stroke-linejoin="round"
+                                     class="text-success"
+                                     aria-hidden="true">
+
+                                    <circle cx="12"
+                                            cy="12"
+                                            r="9" />
+
+                                    <path d="m8 12 2.5 2.5L16 9" />
+
+                                </svg>
+
+                                PASS checks
+
+                            </span>
+
+                        </th>
+
+                        <th scope="col"
+                            class="text-center">
+
+                            <span class="d-inline-flex align-items-center gap-1">
+
+                                <svg xmlns="http://www.w3.org/2000/svg"
+                                     width="16"
+                                     height="16"
+                                     viewBox="0 0 24 24"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     stroke-width="2.5"
+                                     stroke-linecap="round"
+                                     stroke-linejoin="round"
+                                     class="text-warning"
+                                     aria-hidden="true">
+
+                                    <path d="M12 3 2.5 20h19L12 3Z" />
+                                    <path d="M12 9v4" />
+                                    <path d="M12 17h.01" />
+
+                                </svg>
+
+                                REVIEW checks
+
+                            </span>
+
+                        </th>
+
+                        <th scope="col"
+                            class="text-center">
+
+                            <span class="d-inline-flex align-items-center gap-1">
+
+                                <svg xmlns="http://www.w3.org/2000/svg"
+                                     width="16"
+                                     height="16"
+                                     viewBox="0 0 24 24"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     stroke-width="2.5"
+                                     stroke-linecap="round"
+                                     stroke-linejoin="round"
+                                     class="text-danger"
+                                     aria-hidden="true">
+
+                                    <circle cx="12"
+                                            cy="12"
+                                            r="9" />
+
+                                    <path d="m9 9 6 6" />
+                                    <path d="m15 9-6 6" />
+
+                                </svg>
+
+                                FAIL checks
+
+                            </span>
+
+                        </th>
+
+                        <th scope="col"
+                            class="text-end">
+                            Duration
+                        </th>
+
+                        <th scope="col">
+                            <span class="visually-hidden">
+                                Actions
+                            </span>
+                        </th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    @if (!VisibleItems.Any())
+                    {
+                        <tr>
+                            <td colspan="8">
+
+                                <div class="table-empty-state">
+
+                                    <strong>
+                                        No matching verification results
+                                    </strong>
+
+                                    <span>
+                                        Select labels or change the current
+                                        result filter.
+                                    </span>
+
+                                </div>
+
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in VisibleItems)
+                        {
+                            var verification =
+                                item.Result?
+                                    .VerificationResult?
+                                    .Verification;
+
+                            <tr>
+
+                                <td>
+                                    <strong>
+                                        @item.File.Name
+                                    </strong>
+                                </td>
+
+                                <td>
+                                    <span class="@GetProcessingBadgeClass(item)">
+                                        @GetProcessingText(item)
+                                    </span>
+                                </td>
+
+                                <td>
+
+                                    @if (item.Result is null)
+                                    {
+                                        <span class="text-secondary">
+                                            —
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="@GetResultBadgeClass(item)">
+
+                                            @if (item.Result.ProcessingStatus ==
+                                                 BatchItemProcessingStatus.Error)
+                                            {
+                                                <svg xmlns="http://www.w3.org/2000/svg"
+                                                     width="15"
+                                                     height="15"
+                                                     viewBox="0 0 24 24"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     stroke-width="2.5"
+                                                     stroke-linecap="round"
+                                                     stroke-linejoin="round"
+                                                     aria-hidden="true">
+
+                                                    <path d="M12 3 2.5 20h19L12 3Z" />
+                                                    <path d="M12 9v4" />
+                                                    <path d="M12 17h.01" />
+
+                                                </svg>
+                                            }
+                                            else if (GetVerificationStatus(item) ==
+                                                     VerificationStatus.Pass)
+                                            {
+                                                <svg xmlns="http://www.w3.org/2000/svg"
+                                                     width="15"
+                                                     height="15"
+                                                     viewBox="0 0 24 24"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     stroke-width="2.5"
+                                                     stroke-linecap="round"
+                                                     stroke-linejoin="round"
+                                                     aria-hidden="true">
+
+                                                    <circle cx="12"
+                                                            cy="12"
+                                                            r="9" />
+
+                                                    <path d="m8 12 2.5 2.5L16 9" />
+
+                                                </svg>
+                                            }
+                                            else if (GetVerificationStatus(item) ==
+                                                     VerificationStatus.Review)
+                                            {
+                                                <svg xmlns="http://www.w3.org/2000/svg"
+                                                     width="15"
+                                                     height="15"
+                                                     viewBox="0 0 24 24"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     stroke-width="2.5"
+                                                     stroke-linecap="round"
+                                                     stroke-linejoin="round"
+                                                     aria-hidden="true">
+
+                                                    <path d="M12 3 2.5 20h19L12 3Z" />
+                                                    <path d="M12 9v4" />
+                                                    <path d="M12 17h.01" />
+
+                                                </svg>
+                                            }
+                                            else if (GetVerificationStatus(item) ==
+                                                     VerificationStatus.Fail)
+                                            {
+                                                <svg xmlns="http://www.w3.org/2000/svg"
+                                                     width="15"
+                                                     height="15"
+                                                     viewBox="0 0 24 24"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     stroke-width="2.5"
+                                                     stroke-linecap="round"
+                                                     stroke-linejoin="round"
+                                                     aria-hidden="true">
+
+                                                    <circle cx="12"
+                                                            cy="12"
+                                                            r="9" />
+
+                                                    <path d="m9 9 6 6" />
+                                                    <path d="m15 9-6 6" />
+
+                                                </svg>
+                                            }
+
+                                            <span>
+                                                @GetResultText(item)
+                                            </span>
+
+                                        </span>
+                                    }
+
+                                </td>
+
+                                <td class="text-center">
+
+                                    @if (verification is null)
+                                    {
+                                        <span class="text-secondary">
+                                            —
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="@GetCheckBadgeClass(
+                                            VerificationStatus.Pass,
+                                            verification.PassCount)">
+
+                                            <svg xmlns="http://www.w3.org/2000/svg"
+                                                 width="15"
+                                                 height="15"
+                                                 viewBox="0 0 24 24"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 stroke-width="2.5"
+                                                 stroke-linecap="round"
+                                                 stroke-linejoin="round"
+                                                 aria-hidden="true">
+
+                                                <circle cx="12"
+                                                        cy="12"
+                                                        r="9" />
+
+                                                <path d="m8 12 2.5 2.5L16 9" />
+
+                                            </svg>
+
+                                            <span>
+                                                @verification.PassCount
+                                            </span>
+
+                                        </span>
+                                    }
+
+                                </td>
+
+                                <td class="text-center">
+
+                                    @if (verification is null)
+                                    {
+                                        <span class="text-secondary">
+                                            —
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="@GetCheckBadgeClass(
+                                            VerificationStatus.Review,
+                                            verification.ReviewCount)">
+
+                                            <svg xmlns="http://www.w3.org/2000/svg"
+                                                 width="15"
+                                                 height="15"
+                                                 viewBox="0 0 24 24"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 stroke-width="2.5"
+                                                 stroke-linecap="round"
+                                                 stroke-linejoin="round"
+                                                 aria-hidden="true">
+
+                                                <path d="M12 3 2.5 20h19L12 3Z" />
+                                                <path d="M12 9v4" />
+                                                <path d="M12 17h.01" />
+
+                                            </svg>
+
+                                            <span>
+                                                @verification.ReviewCount
+                                            </span>
+
+                                        </span>
+                                    }
+
+                                </td>
+
+                                <td class="text-center">
+
+                                    @if (verification is null)
+                                    {
+                                        <span class="text-secondary">
+                                            —
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="@GetCheckBadgeClass(
+                                            VerificationStatus.Fail,
+                                            verification.FailCount)">
+
+                                            <svg xmlns="http://www.w3.org/2000/svg"
+                                                 width="15"
+                                                 height="15"
+                                                 viewBox="0 0 24 24"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 stroke-width="2.5"
+                                                 stroke-linecap="round"
+                                                 stroke-linejoin="round"
+                                                 aria-hidden="true">
+
+                                                <circle cx="12"
+                                                        cy="12"
+                                                        r="9" />
+
+                                                <path d="m9 9 6 6" />
+                                                <path d="m15 9-6 6" />
+
+                                            </svg>
+
+                                            <span>
+                                                @verification.FailCount
+                                            </span>
+
+                                        </span>
+                                    }
+
+                                </td>
+
+                                <td class="text-end text-nowrap">
+                                    @(item.Result is null
+                                        ? "—"
+                                        : FormatDuration(
+                                            item.Result.Duration))
+                                </td>
+
+                                <td class="text-end">
+
+                                    @if (item.Result is not null)
+                                    {
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-primary text-nowrap"
+                                                @onclick="() => ToggleDetails(item)">
+
+                                            @if (_expandedItemId ==
+                                                 item.ItemId)
+                                            {
+                                                <span>
+                                                    Hide details
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="d-inline-flex align-items-center gap-1">
+
+                                                    <svg xmlns="http://www.w3.org/2000/svg"
+                                                         width="15"
+                                                         height="15"
+                                                         viewBox="0 0 24 24"
+                                                         fill="none"
+                                                         stroke="currentColor"
+                                                         stroke-width="2"
+                                                         stroke-linecap="round"
+                                                         stroke-linejoin="round"
+                                                         aria-hidden="true">
+
+                                                        <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
+
+                                                        <circle cx="12"
+                                                                cy="12"
+                                                                r="2.5" />
+
+                                                    </svg>
+
+                                                    Review
+
+                                                </span>
+                                            }
+
+                                        </button>
+                                    }
+
+                                </td>
+
+                            </tr>
+
+                            @if (_expandedItemId == item.ItemId &&
+                                 item.Result is not null)
+                            {
+                                <tr class="batch-detail-row">
+
+                                    <td colspan="8">
+
+                                        @if (item.Result.ProcessingStatus ==
+                                             BatchItemProcessingStatus.Error)
+                                        {
+                                            <div class="alert alert-warning mb-0">
+
+                                                <div class="fw-semibold">
+                                                    Technical processing error
+                                                </div>
+
+                                                <div>
+                                                    @GetErrorMessage(item)
+                                                </div>
+
+                                                @if (!string.IsNullOrWhiteSpace(
+                                                        GetErrorCode(item)))
+                                                {
+                                                    <div class="small mt-1">
+                                                        Error code:
+                                                        <code>
+                                                            @GetErrorCode(item)
+                                                        </code>
+                                                    </div>
+                                                }
+
+                                            </div>
+                                        }
+                                        else if (verification is not null)
+                                        {
+                                            @if (verification.OverallStatus ==
+                                                 VerificationStatus.Review)
+                                            {
+                                                <div class="alert alert-warning">
+
+                                                    Human review is required.
+                                                    Review the flagged fields
+                                                    below before making the
+                                                    final compliance
+                                                    determination.
+
+                                                </div>
+                                            }
+
+                                            <VerificationCheckList
+                                                Verification="verification" />
+                                        }
+
+                                    </td>
+
+                                </tr>
+                            }
+                        }
+                    }
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </section>
+
+</section>
+
+@code {
+    private const long MaxUploadBytes =
+        10L * 1024L * 1024L;
+
+    [Parameter]
+    public string ApplicationId { get; set; } =
+        string.Empty;
+
+    private readonly List<BatchUiItem> _items =
+        [];
+
+    private CancellationTokenSource?
+        _batchCancellation;
+
+    private BatchVerificationProgress?
+        _progress;
+
+    private BatchVerificationResult?
+        _batchResult;
+
+    private bool _isProcessing;
+
+    private bool _hasRun;
+
+    private string?
+        _selectionError;
+
+    private string?
+        _batchError;
+
+    private string
+        _searchText =
+            string.Empty;
+
+    private ResultFilter
+        _filter =
+            ResultFilter.All;
+
+    private string?
+        _expandedItemId;
+
+    private bool CanVerify =>
+        !_isProcessing &&
+        _items.Count > 0 &&
+        !string.IsNullOrWhiteSpace(
+            ApplicationId);
+
+    private int PassCount =>
+        _items.Count(
+            item =>
+                GetVerificationStatus(item) ==
+                VerificationStatus.Pass);
+
+    private int ReviewCount =>
+        _items.Count(
+            item =>
+                GetVerificationStatus(item) ==
+                VerificationStatus.Review);
+
+    private int FailCount =>
+        _items.Count(
+            item =>
+                GetVerificationStatus(item) ==
+                VerificationStatus.Fail);
+
+    private int ErrorCount =>
+        _items.Count(
+            item =>
+                item.Result?.ProcessingStatus ==
+                BatchItemProcessingStatus.Error);
+
+    private int CompletedCount =>
+        _items.Count(
+            item =>
+                item.Result is not null);
+
+    private double ProgressPercent =>
+        _items.Count == 0
+            ? 0
+            : Math.Clamp(
+                CompletedCount * 100d /
+                _items.Count,
+                0,
+                100);
+
+    private string ProgressText =>
+        !_hasRun
+            ? "Not started"
+            : _isProcessing &&
+              CompletedCount == 0
+                ? "Preparing and verifying labels..."
+                : _isProcessing
+                    ? $"{CompletedCount} of {_items.Count} completed"
+                    : CompletedCount == _items.Count
+                        ? "Completed"
+                        : $"{CompletedCount} of {_items.Count} completed";
+
+    private string? BatchCorrelationId =>
+        _progress?.BatchCorrelationId ??
+        _batchResult?.BatchCorrelationId;
+
+    private IEnumerable<BatchUiItem> VisibleItems =>
+        _items
+            .Where(
+                MatchesFilter)
+            .Where(
+                MatchesSearch);
+
+    private async Task HandleFilesSelected(
+        InputFileChangeEventArgs args)
+    {
+        _selectionError =
+            null;
+
+        _batchError =
+            null;
+
+        if (_hasRun)
+        {
+            ResetVerificationState();
+        }
+
+        IReadOnlyList<IBrowserFile> files;
+
+        try
+        {
+            files =
+                args.GetMultipleFiles(
+                    BatchOptions.MaxBatchSize);
+        }
+        catch (InvalidOperationException)
+        {
+            _selectionError =
+                $"Select no more than " +
+                $"{BatchOptions.MaxBatchSize} files at one time.";
+
+            return;
+        }
+
+        foreach (var file in files)
+        {
+            if (_items.Any(
+                item =>
+                    string.Equals(
+                        item.File.Name,
+                        file.Name,
+                        StringComparison.OrdinalIgnoreCase) &&
+                    item.File.Size ==
+                    file.Size))
+            {
+                continue;
+            }
+
+            if (_items.Count >=
+                BatchOptions.MaxBatchSize)
+            {
+                _selectionError =
+                    $"The batch maximum is " +
+                    $"{BatchOptions.MaxBatchSize} labels.";
+
+                break;
+            }
+
+            _items.Add(
+                new BatchUiItem(
+                    file));
+        }
+
+        await InvokeAsync(
+            StateHasChanged);
+    }
+
+    private async Task VerifyBatchAsync()
+    {
+        if (!CanVerify)
+        {
+            return;
+        }
+
+        _batchError =
+            null;
+
+        _selectionError =
+            null;
+
+        _batchResult =
+            null;
+
+        _progress =
+            null;
+
+        _expandedItemId =
+            null;
+
+        _hasRun =
+            true;
+
+        foreach (var item in _items)
+        {
+            item.ProcessingStatus =
+                BatchItemProcessingStatus.Pending;
+
+            item.Result =
+                null;
+        }
+
+        _batchCancellation?.Dispose();
+
+        _batchCancellation =
+            new CancellationTokenSource();
+
+        _isProcessing =
+            true;
+
+        List<StagedBatchFile> stagedFiles =
+            [];
+
+        var progress =
+            new Progress<BatchVerificationProgress>(
+                snapshot =>
+                {
+                    _ =
+                        InvokeAsync(
+                            () =>
+                            {
+                                ApplyProgress(
+                                    snapshot);
+
+                                StateHasChanged();
+                            });
+                });
+
+        try
+        {
+            stagedFiles =
+                await StageFilesAsync(
+                    _batchCancellation.Token);
+
+            var requests =
+                stagedFiles
+                    .Select(
+                        staged =>
+                            new BatchVerificationItemRequest(
+                                staged.ItemId,
+                                staged.DisplayName,
+                                staged.ContentType,
+                                staged.Size,
+                                () =>
+                                    new FileStream(
+                                        staged.Path,
+                                        FileMode.Open,
+                                        FileAccess.Read,
+                                        FileShare.Read,
+                                        bufferSize: 81920,
+                                        FileOptions.Asynchronous |
+                                        FileOptions.SequentialScan)))
+                    .ToArray();
+
+            var result =
+                await BatchVerificationService
+                    .VerifyAsync(
+                        ApplicationId,
+                        requests,
+                        progress,
+                        _batchCancellation.Token);
+
+            _batchResult =
+                result;
+
+            foreach (var completedItem in result.Items)
+            {
+                var uiItem =
+                    _items.FirstOrDefault(
+                        item =>
+                            item.ItemId ==
+                            completedItem.ItemId);
+
+                if (uiItem is null)
+                {
+                    continue;
+                }
+
+                uiItem.Result =
+                    completedItem;
+
+                uiItem.ProcessingStatus =
+                    completedItem.ProcessingStatus;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _batchError =
+                "Batch verification was canceled. " +
+                "Any labels that already completed remain visible.";
+        }
+        catch (ArgumentException exception)
+        {
+            _batchError =
+                exception.Message;
+        }
+        catch (IOException exception)
+        {
+            Logger.LogWarning(
+                "Batch upload staging failed. " +
+                "ApplicationId={ApplicationId}, " +
+                "ExceptionType={ExceptionType}.",
+                ApplicationId,
+                exception.GetType().Name);
+
+            _batchError =
+                "One or more label images could not be prepared " +
+                "for verification.";
+        }
+        catch (TimeoutException exception)
+        {
+            Logger.LogWarning(
+                "Batch upload staging timed out. " +
+                "ApplicationId={ApplicationId}, " +
+                "ExceptionType={ExceptionType}.",
+                ApplicationId,
+                exception.GetType().Name);
+
+            _batchError =
+                "The browser upload timed out while preparing the batch. " +
+                "Please retry the batch.";
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(
+                "Batch verification terminated unexpectedly. " +
+                "ApplicationId={ApplicationId}, " +
+                "ExceptionType={ExceptionType}.",
+                ApplicationId,
+                exception.GetType().Name);
+
+            _batchError =
+                "The batch could not be completed because of an " +
+                "unexpected technical problem.";
+        }
+        finally
+        {
+            foreach (var stagedFile in stagedFiles)
+            {
+                TryDeleteStagedFile(
+                    stagedFile.Path);
+            }
+
+            _isProcessing =
+                false;
+
+            _batchCancellation?.Dispose();
+
+            _batchCancellation =
+                null;
+        }
+    }
+
+    private async Task<List<StagedBatchFile>> StageFilesAsync(
+        CancellationToken cancellationToken)
+    {
+        var stagedFiles =
+            new List<StagedBatchFile>(
+                _items.Count);
+
+        try
+        {
+            foreach (var item in _items)
+            {
+                cancellationToken
+                    .ThrowIfCancellationRequested();
+
+                var temporaryPath =
+                    Path.Combine(
+                        Path.GetTempPath(),
+                        $"ttb-label-{Guid.NewGuid():N}.upload");
+
+                await using var source =
+                    item.File.OpenReadStream(
+                        MaxUploadBytes,
+                        cancellationToken);
+
+                await using var destination =
+                    new FileStream(
+                        temporaryPath,
+                        new FileStreamOptions
+                        {
+                            Mode =
+                                FileMode.CreateNew,
+
+                            Access =
+                                FileAccess.Write,
+
+                            Share =
+                                FileShare.None,
+
+                            BufferSize =
+                                81920,
+
+                            Options =
+                                FileOptions.Asynchronous |
+                                FileOptions.SequentialScan
+                        });
+
+                await source.CopyToAsync(
+                    destination,
+                    cancellationToken);
+
+                stagedFiles.Add(
+                    new StagedBatchFile(
+                        item.ItemId,
+                        item.File.Name,
+                        item.File.ContentType,
+                        item.File.Size,
+                        temporaryPath));
+            }
+
+            return stagedFiles;
+        }
+        catch
+        {
+            foreach (var stagedFile in stagedFiles)
+            {
+                TryDeleteStagedFile(
+                    stagedFile.Path);
+            }
+
+            throw;
+        }
+    }
+
+    private void TryDeleteStagedFile(
+        string path)
+    {
+        try
+        {
+            if (File.Exists(
+                    path))
+            {
+                File.Delete(
+                    path);
+            }
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(
+                "Unable to delete a temporary batch upload. " +
+                "ExceptionType={ExceptionType}.",
+                exception.GetType().Name);
+        }
+    }
+
+    private void ApplyProgress(
+        BatchVerificationProgress progress)
+    {
+        _progress =
+            progress;
+
+        if (string.IsNullOrWhiteSpace(
+                progress.ItemId))
+        {
+            return;
+        }
+
+        var item =
+            _items.FirstOrDefault(
+                candidate =>
+                    candidate.ItemId ==
+                    progress.ItemId);
+
+        if (item is null)
+        {
+            return;
+        }
+
+        if (progress.ItemProcessingStatus.HasValue)
+        {
+            item.ProcessingStatus =
+                progress.ItemProcessingStatus.Value;
+        }
+
+        if (progress.CompletedItemResult is not null)
+        {
+            item.Result =
+                progress.CompletedItemResult;
+
+            item.ProcessingStatus =
+                progress.CompletedItemResult
+                    .ProcessingStatus;
+        }
+    }
+
+    private void CancelBatch()
+    {
+        _batchCancellation?
+            .Cancel();
+    }
+
+    private void RemoveFile(
+        BatchUiItem item)
+    {
+        if (_isProcessing)
+        {
+            return;
+        }
+
+        _items.Remove(
+            item);
+
+        ResetVerificationState();
+    }
+
+    private void ClearFiles()
+    {
+        if (_isProcessing)
+        {
+            return;
+        }
+
+        _items.Clear();
+
+        ResetVerificationState();
+    }
+
+    private void ResetVerificationState()
+    {
+        _progress =
+            null;
+
+        _batchResult =
+            null;
+
+        _batchError =
+            null;
+
+        _expandedItemId =
+            null;
+
+        _hasRun =
+            false;
+
+        foreach (var item in _items)
+        {
+            item.Result =
+                null;
+
+            item.ProcessingStatus =
+                BatchItemProcessingStatus.Pending;
+        }
+    }
+
+    private void SetFilter(
+        ResultFilter filter)
+    {
+        _filter =
+            filter;
+    }
+
+    private bool MatchesFilter(
+        BatchUiItem item)
+    {
+        return _filter switch
+        {
+            ResultFilter.All =>
+                true,
+
+            ResultFilter.Pass =>
+                GetVerificationStatus(item) ==
+                VerificationStatus.Pass,
+
+            ResultFilter.Review =>
+                GetVerificationStatus(item) ==
+                VerificationStatus.Review,
+
+            ResultFilter.Fail =>
+                GetVerificationStatus(item) ==
+                VerificationStatus.Fail,
+
+            ResultFilter.Error =>
+                item.Result?.ProcessingStatus ==
+                BatchItemProcessingStatus.Error,
+
+            _ =>
+                true
+        };
+    }
+
+    private bool MatchesSearch(
+        BatchUiItem item)
+    {
+        return string.IsNullOrWhiteSpace(
+                   _searchText) ||
+               item.File.Name.Contains(
+                   _searchText,
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string GetFilterButtonClass(
+        ResultFilter filter)
+    {
+        return _filter == filter
+            ? "filter-button active"
+            : "filter-button";
+    }
+
+    private void ToggleDetails(
+        BatchUiItem item)
+    {
+        _expandedItemId =
+            _expandedItemId ==
+            item.ItemId
+                ? null
+                : item.ItemId;
+    }
+
+    private VerificationStatus?
+        GetVerificationStatus(
+            BatchUiItem item)
+    {
+        return item.Result?
+            .VerificationResult?
+            .Verification?
+            .OverallStatus;
+    }
+
+    private string GetProcessingText(
+        BatchUiItem item)
+    {
+        if (!_hasRun &&
+            item.Result is null)
+        {
+            return "Ready";
+        }
+
+        return item.ProcessingStatus switch
+        {
+            BatchItemProcessingStatus.Pending =>
+                "Pending",
+
+            BatchItemProcessingStatus.Processing =>
+                "Processing",
+
+            BatchItemProcessingStatus.Completed =>
+                "Completed",
+
+            BatchItemProcessingStatus.Error =>
+                "Error",
+
+            _ =>
+                "Pending"
+        };
+    }
+
+    private string GetProcessingBadgeClass(
+        BatchUiItem item)
+    {
+        if (!_hasRun &&
+            item.Result is null)
+        {
+            return "status-pill status-ready";
+        }
+
+        return item.ProcessingStatus switch
+        {
+            BatchItemProcessingStatus.Processing =>
+                "badge text-bg-primary",
+
+            BatchItemProcessingStatus.Completed =>
+                "badge text-bg-success",
+
+            BatchItemProcessingStatus.Error =>
+                "badge text-bg-danger",
+
+            _ =>
+                "badge text-bg-secondary"
+        };
+    }
+
+    private string GetResultText(
+        BatchUiItem item)
+    {
+        if (item.Result?.ProcessingStatus ==
+            BatchItemProcessingStatus.Error)
+        {
+            return "ERROR";
+        }
+
+        return GetVerificationStatus(item)?
+            .ToString()
+            .ToUpperInvariant()
+            ?? "—";
+    }
+
+    private string GetResultBadgeClass(
+        BatchUiItem item)
+    {
+        const string baseClass =
+            "badge rounded-pill d-inline-flex align-items-center " +
+            "gap-1 px-2 py-2 fw-semibold";
+
+        if (item.Result?.ProcessingStatus ==
+            BatchItemProcessingStatus.Error)
+        {
+            return
+                $"{baseClass} text-bg-dark";
+        }
+
+        return GetVerificationStatus(item) switch
+        {
+            VerificationStatus.Pass =>
+                $"{baseClass} text-bg-success",
+
+            VerificationStatus.Review =>
+                $"{baseClass} text-bg-warning",
+
+            VerificationStatus.Fail =>
+                $"{baseClass} text-bg-danger",
+
+            _ =>
+                $"{baseClass} text-bg-secondary"
+        };
+    }
+
+    private static string GetCheckBadgeClass(
+        VerificationStatus status,
+        int count)
+    {
+        const string baseClass =
+            "d-inline-flex align-items-center justify-content-center " +
+            "gap-1 rounded-pill px-2 py-1 fw-semibold small";
+
+        if (count == 0)
+        {
+            return
+                $"{baseClass} text-secondary bg-light border";
+        }
+
+        return status switch
+        {
+            VerificationStatus.Pass =>
+                $"{baseClass} text-success bg-success bg-opacity-10 " +
+                "border border-success",
+
+            VerificationStatus.Review =>
+                $"{baseClass} text-dark bg-warning bg-opacity-25 " +
+                "border border-warning",
+
+            VerificationStatus.Fail =>
+                $"{baseClass} text-danger bg-danger bg-opacity-10 " +
+                "border border-danger",
+
+            _ =>
+                $"{baseClass} text-secondary bg-light border"
+        };
+    }
+
+    private static string? GetErrorCode(
+        BatchUiItem item)
+    {
+        return item.Result?.ErrorCode ??
+               item.Result?
+                   .VerificationResult?
+                   .ErrorCode;
+    }
+
+    private static string GetErrorMessage(
+        BatchUiItem item)
+    {
+        return item.Result?.ErrorMessage ??
+               item.Result?
+                   .VerificationResult?
+                   .ErrorMessage ??
+               "The label could not be processed.";
+    }
+
+    private static string DisplayContentType(
+        string? contentType)
+    {
+        return string.IsNullOrWhiteSpace(
+            contentType)
+                ? "Image"
+                : contentType;
+    }
+
+    private static string FormatDuration(
+        TimeSpan duration)
+    {
+        return duration.TotalSeconds >= 1
+            ? $"{duration.TotalSeconds:N2} s"
+            : $"{duration.TotalMilliseconds:N0} ms";
+    }
+
+    private static string FormatFileSize(
+        long bytes)
+    {
+        const double kiloByte =
+            1024d;
+
+        const double megaByte =
+            kiloByte * 1024d;
+
+        return bytes switch
+        {
+            >= (long)megaByte =>
+                $"{bytes / megaByte:N1} MB",
+
+            >= (long)kiloByte =>
+                $"{bytes / kiloByte:N0} KB",
+
+            _ =>
+                $"{bytes:N0} bytes"
+        };
+    }
+
+    private sealed record StagedBatchFile(
+        string ItemId,
+        string DisplayName,
+        string ContentType,
+        long Size,
+        string Path);
+
+    private sealed class BatchUiItem
+    {
+        public BatchUiItem(
+            IBrowserFile file)
+        {
+            ItemId =
+                Guid.NewGuid()
+                    .ToString("N");
+
+            File =
+                file;
+        }
+
+        public string ItemId { get; }
+
+        public IBrowserFile File { get; }
+
+        public BatchItemProcessingStatus
+            ProcessingStatus
+        { get; set; } =
+                BatchItemProcessingStatus.Pending;
+
+        public BatchVerificationItemResult?
+            Result
+        { get; set; }
+    }
+
+    private enum ResultFilter
+    {
+        All,
+        Pass,
+        Review,
+        Fail,
+        Error
+    }
+}

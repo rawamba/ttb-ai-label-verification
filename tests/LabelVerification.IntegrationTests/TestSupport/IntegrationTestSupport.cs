@@ -142,6 +142,10 @@ internal static class IntegrationTestSupport
         var services =
             new ServiceCollection();
 
+        // Register the standard ILogger<T> infrastructure so all application
+        // services can participate in structured logging during composition tests.
+        services.AddLogging();
+
         services.AddApplication();
 
         // The production Web host supplies the real logging infrastructure.
