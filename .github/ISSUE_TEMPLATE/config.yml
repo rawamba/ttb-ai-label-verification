@@ -1,0 +1,13 @@
+# TTB AI-Powered Alcohol Label Verification
+# GitHub issue-template configuration.
+#
+# Blank issues remain disabled so reports begin with enough engineering
+# context to distinguish bugs, feature requests, technical errors, and
+# regulatory behavior.
+
+blank_issues_enabled: false
+
+contact_links:
+  - name: Security concern
+    url: https://github.com/rawamba/ttb-ai-label-verification/security
+    about: Do not publish exploitable security details or sensitive information in a public issue.
