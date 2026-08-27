@@ -573,27 +573,7 @@
             mode;
     }
 
-    private string GetModeButtonClass(
-        VerificationMode mode)
-    {
-        const string baseClasses =
-            "btn w-100 d-flex align-items-center gap-3 p-3 " +
-            "rounded-3 text-start shadow-sm";
-
-        if (mode ==
-            VerificationMode.Single)
-        {
-            return _verificationMode ==
-                   VerificationMode.Single
-                ? $"{baseClasses} btn-primary"
-                : $"{baseClasses} btn-outline-primary bg-white";
-        }
-
-        return _verificationMode ==
-               VerificationMode.Batch
-            ? $"{baseClasses} btn-success"
-            : $"{baseClasses} btn-outline-success bg-white";
-    }
+    
 
     private string GetModeIconContainerClass(
         VerificationMode mode)
@@ -615,14 +595,40 @@
             "rounded-circle bg-body-tertiary flex-shrink-0 p-2";
     }
 
-    private string GetModeDescriptionClass(
-        VerificationMode mode)
+   // Returns the visual state for each verification-mode button.
+//
+// Important: do not add bg-white to outline buttons. Bootstrap's outline
+// variants intentionally change both foreground and background colors on
+// hover/focus. Forcing a white background can create white-on-white text.
+private string GetModeButtonClass(
+    VerificationMode mode)
+{
+    const string baseClasses =
+        "btn w-100 d-flex align-items-center gap-3 p-3 " +
+        "rounded-3 text-start shadow-sm";
+
+    if (mode ==
+        VerificationMode.Single)
     {
         return _verificationMode ==
-               mode
-            ? "d-block small opacity-75 mt-1"
-            : "d-block small text-secondary mt-1";
+               VerificationMode.Single
+            ? $"{baseClasses} btn-primary"
+            : $"{baseClasses} btn-outline-primary";
     }
+
+    return _verificationMode ==
+           VerificationMode.Batch
+        ? $"{baseClasses} btn-success"
+        : $"{baseClasses} btn-outline-success";
+}
+
+// Keep supporting text tied to the button's foreground color so it remains
+// readable when Bootstrap changes the button color on hover and focus.
+private string GetModeDescriptionClass(
+    VerificationMode mode)
+{
+    return "d-block small opacity-75 mt-1";
+}
 
     private void OnFileSelected(
         InputFileChangeEventArgs args)

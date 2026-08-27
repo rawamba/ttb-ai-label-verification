@@ -1,5 +1,15 @@
 ﻿@inherits LayoutComponentBase
 
+@*
+    Primary application shell for the label-verification prototype.
+
+    Keep this layout intentionally simple for compliance users:
+    - focused navigation
+    - no framework/template links
+    - clear prototype context
+    - application content remains the primary focus
+*@
+
 <div class="page">
     <div class="sidebar">
         <NavMenu />
@@ -7,7 +17,13 @@
 
     <main>
         <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+            @*
+                This replaces the default Microsoft documentation link.
+                The text reinforces that the application assists human reviewers.
+            *@
+            <span class="text-muted small">
+                Human-in-the-loop compliance support
+            </span>
         </div>
 
         <article class="content px-4">
@@ -16,8 +32,9 @@
     </main>
 </div>
 
+@* Standard Blazor error UI retained so unexpected client failures remain recoverable. *@
 <div id="blazor-error-ui">
-    An unhandled error has occurred.
+    An unexpected error has occurred.
     <a href="" class="reload">Reload</a>
-    <a class="dismiss">🗙</a>
+    <a class="dismiss" aria-label="Dismiss error message">🗙</a>
 </div>

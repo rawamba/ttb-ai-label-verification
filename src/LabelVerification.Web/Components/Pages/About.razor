@@ -1,0 +1,312 @@
+﻿@page "/about"
+
+<PageTitle>About - Label Verification</PageTitle>
+
+@*
+    Evaluator- and compliance-agent-facing guidance for the prototype.
+
+    This page intentionally explains:
+    - what the prototype does
+    - how automated outcomes should be interpreted
+    - where human judgment remains required
+    - important prototype scope and data-handling limitations
+*@
+
+<div class="container-fluid px-0">
+
+    <header class="mb-4">
+        <h1 class="mb-2">About Label Verification</h1>
+
+        <p class="lead text-muted mb-3">
+            A human-in-the-loop prototype for alcohol label verification using
+            .NET 8, Blazor, Azure Document Intelligence, and deterministic
+            compliance rules.
+        </p>
+
+        <div class="alert alert-primary border-0" role="note">
+            <strong>Designed to assist compliance agents.</strong>
+            AI and OCR extract evidence from submitted labels, while deterministic
+            rules evaluate objective checks. Human reviewers retain final decision
+            authority.
+        </div>
+    </header>
+
+    <section class="mb-5" aria-labelledby="how-it-works-heading">
+        <h2 id="how-it-works-heading" class="h4 mb-3">
+            How it works
+        </h2>
+
+        <p>
+            The prototype separates perception from compliance decision logic.
+            Azure Document Intelligence extracts text and layout evidence from a
+            label image. The application then parses that evidence and applies
+            deterministic verification rules against the selected application record.
+        </p>
+
+        <div class="row g-3 mt-2">
+            <div class="col-md-3">
+                <div class="card h-100 shadow-sm border-0">
+                    <div class="card-body">
+                        <div class="fw-semibold mb-2">1. Select</div>
+                        <p class="text-muted mb-0">
+                            Choose the application record that represents the
+                            expected approved data.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="card h-100 shadow-sm border-0">
+                    <div class="card-body">
+                        <div class="fw-semibold mb-2">2. Upload</div>
+                        <p class="text-muted mb-0">
+                            Submit one label for focused review or multiple labels
+                            for bounded batch verification.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="card h-100 shadow-sm border-0">
+                    <div class="card-body">
+                        <div class="fw-semibold mb-2">3. Verify</div>
+                        <p class="text-muted mb-0">
+                            OCR extracts evidence and deterministic rules compare
+                            supported fields with expected values.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="card h-100 shadow-sm border-0">
+                    <div class="card-body">
+                        <div class="fw-semibold mb-2">4. Review</div>
+                        <p class="text-muted mb-0">
+                            Inspect field-level evidence and apply human judgment
+                            wherever the result requires review.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="mb-5" aria-labelledby="results-heading">
+        <h2 id="results-heading" class="h4 mb-3">
+            Understanding verification results
+        </h2>
+
+        <p class="text-muted">
+            Automated results are decision-support signals. They do not replace
+            the compliance agent's final regulatory determination.
+        </p>
+
+        <div class="table-responsive">
+            <table class="table table-bordered align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col" style="width: 140px;">Result</th>
+                        <th scope="col">What it means</th>
+                        <th scope="col">Agent action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>
+                            <span class="badge bg-success">PASS</span>
+                        </td>
+                        <td>
+                            Available evidence satisfies the implemented automated
+                            verification checks.
+                        </td>
+                        <td>
+                            Review the evidence as appropriate and continue the
+                            compliance workflow.
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td>
+                            <span class="badge bg-warning text-dark">REVIEW</span>
+                        </td>
+                        <td>
+                            One or more fields contain ambiguous, incomplete, or
+                            borderline evidence that should not be forced into an
+                            automated determination.
+                        </td>
+                        <td>
+                            Examine the field-level evidence and make the final
+                            determination using regulatory judgment.
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td>
+                            <span class="badge bg-danger">FAIL</span>
+                        </td>
+                        <td>
+                            One or more deterministic checks clearly differ from
+                            expected application data or an implemented rule.
+                        </td>
+                        <td>
+                            Review the failed field and supporting evidence before
+                            determining the appropriate compliance action.
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td>
+                            <span class="badge bg-secondary">ERROR</span>
+                        </td>
+                        <td>
+                            A technical problem prevented verification from
+                            completing successfully.
+                        </td>
+                        <td>
+                            Retry the operation or investigate the technical issue.
+                            ERROR is not a regulatory failure.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="mb-5" aria-labelledby="checks-heading">
+        <h2 id="checks-heading" class="h4 mb-3">
+            Current verification coverage
+        </h2>
+
+        <p>
+            The prototype currently evaluates supported evidence for the following
+            compliance fields:
+        </p>
+
+        <ul>
+            <li>Brand name, including controlled similarity handling</li>
+            <li>Alcohol by volume (ABV)</li>
+            <li>Proof</li>
+            <li>Net contents with unit-aware comparison</li>
+            <li>Government Warning wording and supported presentation evidence</li>
+        </ul>
+
+        <div class="alert alert-light border" role="note">
+            <strong>Class/type:</strong>
+            Class/type information may be extracted and displayed for context,
+            but it is not currently included in the aggregate automated
+            PASS / REVIEW / FAIL determination.
+        </div>
+    </section>
+
+    <section class="mb-5" aria-labelledby="agent-guidance-heading">
+        <h2 id="agent-guidance-heading" class="h4 mb-3">
+            Guidance for compliance agents
+        </h2>
+
+        <div class="row g-3">
+            <div class="col-lg-6">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h3 class="h6">Use field-level evidence</h3>
+                        <p class="mb-0">
+                            Expand individual results when a determination is
+                            unclear. The overall status should be considered
+                            together with the extracted evidence and explanation
+                            for each field.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h3 class="h6">Treat REVIEW as intentional</h3>
+                        <p class="mb-0">
+                            REVIEW exists to preserve human judgment when evidence
+                            is ambiguous. It is not a system failure and should not
+                            automatically be treated as noncompliance.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h3 class="h6">Keep ERROR separate from FAIL</h3>
+                        <p class="mb-0">
+                            Technical failures are operational conditions.
+                            A label should not receive a regulatory failure merely
+                            because OCR, image processing, or another technical
+                            dependency could not complete.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h3 class="h6">Use batch mode for larger submissions</h3>
+                        <p class="mb-0">
+                            Batch verification processes labels independently so
+                            agents can identify PASS, REVIEW, FAIL, and technical
+                            ERROR results without losing visibility into individual
+                            label evidence.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="mb-4" aria-labelledby="scope-heading">
+        <h2 id="scope-heading" class="h4 mb-3">
+            Prototype scope and limitations
+        </h2>
+
+        <ul>
+            <li>
+                This prototype is a standalone demonstration and does not connect
+                directly to COLA.
+            </li>
+            <li>
+                It does not write regulatory decisions back to Treasury or TTB
+                systems.
+            </li>
+            <li>
+                AI and OCR provide perception and evidence extraction; they are
+                not the regulatory authority.
+            </li>
+            <li>
+                Deterministic rules are used for objective automated checks.
+            </li>
+            <li>
+                Ambiguous evidence is intentionally routed to human review rather
+                than forced into an unsupported automated determination.
+            </li>
+            <li>
+                Human reviewers retain final decision authority.
+            </li>
+        </ul>
+    </section>
+
+    <section class="mb-5" aria-labelledby="data-heading">
+        <div class="alert alert-warning" role="note">
+            <h2 id="data-heading" class="h6 alert-heading">
+                Prototype data handling
+            </h2>
+
+            <p class="mb-0">
+                Use synthetic or otherwise approved test data when evaluating this
+                prototype. Do not upload production applicant data, personally
+                identifiable information, or other sensitive information.
+            </p>
+        </div>
+    </section>
+
+</div>
