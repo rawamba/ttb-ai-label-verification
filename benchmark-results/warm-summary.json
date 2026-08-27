@@ -1,0 +1,258 @@
+{
+  "Environment": {
+    "GeneratedUtc": "2026-08-27T02:05:30.3835615+00:00",
+    "GitSha": "96cdd6ca966a82f63ca72bc6c9b287ba2a574e6b",
+    "DotnetSdk": "10.0.300",
+    "Runtime": ".NET 8.0.30",
+    "OperatingSystem": "Microsoft Windows 10.0.26200",
+    "Architecture": "X64",
+    "LogicalProcessorCount": 16,
+    "BenchmarkLocation": "Windows 11 developer workstation to Azure Document Intelligence",
+    "AzureRegion": "East US 2",
+    "DocumentIntelligenceSku": "S0",
+    "EndpointHost": "docintel-ttb-label-verification-iwluomsqzvz26.cognitiveservices.azure.com",
+    "ModelId": "prebuilt-read",
+    "TimeoutSeconds": 5,
+    "EnableFontStyling": true,
+    "Authentication": "DefaultAzureCredential",
+    "WarmupObservationCount": 5,
+    "MeasuredIterations": 10,
+    "MeasuredObservationCount": 50
+  },
+  "Overall": {
+    "Name": "Overall",
+    "ObservationCount": 50,
+    "SuccessCount": 50,
+    "FailureCount": 0,
+    "OcrTimeoutCount": 0,
+    "TargetMetCount": 50,
+    "TargetRatePercent": 100,
+    "ObservedAttempt": {
+      "Count": 50,
+      "MedianMilliseconds": 2200.93845,
+      "P95Milliseconds": 2619.8494,
+      "WorstMilliseconds": 3276.5382
+    },
+    "Total": {
+      "Count": 50,
+      "MedianMilliseconds": 2200.93845,
+      "P95Milliseconds": 2619.8494,
+      "WorstMilliseconds": 3276.5382
+    },
+    "Ocr": {
+      "Count": 50,
+      "MedianMilliseconds": 2200.5629,
+      "P95Milliseconds": 2619.1218,
+      "WorstMilliseconds": 3276.0656
+    },
+    "Verification": {
+      "Count": 50,
+      "MedianMilliseconds": 0.21334999999999998,
+      "P95Milliseconds": 0.3531,
+      "WorstMilliseconds": 0.7916
+    },
+    "HarnessElapsed": {
+      "Count": 50,
+      "MedianMilliseconds": 2201.04575,
+      "P95Milliseconds": 2620.2354,
+      "WorstMilliseconds": 3276.6337
+    }
+  },
+  "ByImage": [
+    {
+      "Name": "brand-variation-label.png",
+      "ObservationCount": 10,
+      "SuccessCount": 10,
+      "FailureCount": 0,
+      "OcrTimeoutCount": 0,
+      "TargetMetCount": 10,
+      "TargetRatePercent": 100,
+      "ObservedAttempt": {
+        "Count": 10,
+        "MedianMilliseconds": 2182.4859500000002,
+        "P95Milliseconds": 3276.5382,
+        "WorstMilliseconds": 3276.5382
+      },
+      "Total": {
+        "Count": 10,
+        "MedianMilliseconds": 2182.4859500000002,
+        "P95Milliseconds": 3276.5382,
+        "WorstMilliseconds": 3276.5382
+      },
+      "Ocr": {
+        "Count": 10,
+        "MedianMilliseconds": 2181.9879,
+        "P95Milliseconds": 3276.0656,
+        "WorstMilliseconds": 3276.0656
+      },
+      "Verification": {
+        "Count": 10,
+        "MedianMilliseconds": 0.23155,
+        "P95Milliseconds": 0.7916,
+        "WorstMilliseconds": 0.7916
+      },
+      "HarnessElapsed": {
+        "Count": 10,
+        "MedianMilliseconds": 2182.6034,
+        "P95Milliseconds": 3276.6337,
+        "WorstMilliseconds": 3276.6337
+      }
+    },
+    {
+      "Name": "compliant-label.png",
+      "ObservationCount": 10,
+      "SuccessCount": 10,
+      "FailureCount": 0,
+      "OcrTimeoutCount": 0,
+      "TargetMetCount": 10,
+      "TargetRatePercent": 100,
+      "ObservedAttempt": {
+        "Count": 10,
+        "MedianMilliseconds": 2189.6784500000003,
+        "P95Milliseconds": 2195.3991,
+        "WorstMilliseconds": 2195.3991
+      },
+      "Total": {
+        "Count": 10,
+        "MedianMilliseconds": 2189.6784500000003,
+        "P95Milliseconds": 2195.3991,
+        "WorstMilliseconds": 2195.3991
+      },
+      "Ocr": {
+        "Count": 10,
+        "MedianMilliseconds": 2189.2452,
+        "P95Milliseconds": 2194.9018,
+        "WorstMilliseconds": 2194.9018
+      },
+      "Verification": {
+        "Count": 10,
+        "MedianMilliseconds": 0.2131,
+        "P95Milliseconds": 0.2877,
+        "WorstMilliseconds": 0.2877
+      },
+      "HarnessElapsed": {
+        "Count": 10,
+        "MedianMilliseconds": 2189.7963,
+        "P95Milliseconds": 2195.5018,
+        "WorstMilliseconds": 2195.5018
+      }
+    },
+    {
+      "Name": "compliant-with-glare.jpg",
+      "ObservationCount": 10,
+      "SuccessCount": 10,
+      "FailureCount": 0,
+      "OcrTimeoutCount": 0,
+      "TargetMetCount": 10,
+      "TargetRatePercent": 100,
+      "ObservedAttempt": {
+        "Count": 10,
+        "MedianMilliseconds": 2202.77925,
+        "P95Milliseconds": 2253.3755,
+        "WorstMilliseconds": 2253.3755
+      },
+      "Total": {
+        "Count": 10,
+        "MedianMilliseconds": 2202.77925,
+        "P95Milliseconds": 2253.3755,
+        "WorstMilliseconds": 2253.3755
+      },
+      "Ocr": {
+        "Count": 10,
+        "MedianMilliseconds": 2202.3685,
+        "P95Milliseconds": 2252.8543,
+        "WorstMilliseconds": 2252.8543
+      },
+      "Verification": {
+        "Count": 10,
+        "MedianMilliseconds": 0.2026,
+        "P95Milliseconds": 0.3531,
+        "WorstMilliseconds": 0.3531
+      },
+      "HarnessElapsed": {
+        "Count": 10,
+        "MedianMilliseconds": 2202.89615,
+        "P95Milliseconds": 2253.4951,
+        "WorstMilliseconds": 2253.4951
+      }
+    },
+    {
+      "Name": "degraded-label.jpg",
+      "ObservationCount": 10,
+      "SuccessCount": 10,
+      "FailureCount": 0,
+      "OcrTimeoutCount": 0,
+      "TargetMetCount": 10,
+      "TargetRatePercent": 100,
+      "ObservedAttempt": {
+        "Count": 10,
+        "MedianMilliseconds": 2205.9717,
+        "P95Milliseconds": 2482.404,
+        "WorstMilliseconds": 2482.404
+      },
+      "Total": {
+        "Count": 10,
+        "MedianMilliseconds": 2205.9717,
+        "P95Milliseconds": 2482.404,
+        "WorstMilliseconds": 2482.404
+      },
+      "Ocr": {
+        "Count": 10,
+        "MedianMilliseconds": 2205.5095,
+        "P95Milliseconds": 2481.8597,
+        "WorstMilliseconds": 2481.8597
+      },
+      "Verification": {
+        "Count": 10,
+        "MedianMilliseconds": 0.20815,
+        "P95Milliseconds": 0.3551,
+        "WorstMilliseconds": 0.3551
+      },
+      "HarnessElapsed": {
+        "Count": 10,
+        "MedianMilliseconds": 2206.10945,
+        "P95Milliseconds": 2482.5293,
+        "WorstMilliseconds": 2482.5293
+      }
+    },
+    {
+      "Name": "rotated-label.png",
+      "ObservationCount": 10,
+      "SuccessCount": 10,
+      "FailureCount": 0,
+      "OcrTimeoutCount": 0,
+      "TargetMetCount": 10,
+      "TargetRatePercent": 100,
+      "ObservedAttempt": {
+        "Count": 10,
+        "MedianMilliseconds": 2302.19925,
+        "P95Milliseconds": 2619.8494,
+        "WorstMilliseconds": 2619.8494
+      },
+      "Total": {
+        "Count": 10,
+        "MedianMilliseconds": 2302.19925,
+        "P95Milliseconds": 2619.8494,
+        "WorstMilliseconds": 2619.8494
+      },
+      "Ocr": {
+        "Count": 10,
+        "MedianMilliseconds": 2301.6112000000003,
+        "P95Milliseconds": 2619.1218,
+        "WorstMilliseconds": 2619.1218
+      },
+      "Verification": {
+        "Count": 10,
+        "MedianMilliseconds": 0.22299999999999998,
+        "P95Milliseconds": 0.3078,
+        "WorstMilliseconds": 0.3078
+      },
+      "HarnessElapsed": {
+        "Count": 10,
+        "MedianMilliseconds": 2302.31985,
+        "P95Milliseconds": 2620.2354,
+        "WorstMilliseconds": 2620.2354
+      }
+    }
+  ]
+}
