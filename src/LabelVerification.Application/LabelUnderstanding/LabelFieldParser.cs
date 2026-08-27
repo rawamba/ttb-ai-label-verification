@@ -294,11 +294,24 @@ public sealed partial class LabelFieldParser : ILabelFieldParser
             return null;
         }
 
-        var businessIndex = Array.FindIndex(
-            lines,
-            line =>
-                ProducerOrBusinessRegex().IsMatch(line) ||
-                ProducerPrefixRegex().IsMatch(line));
+        // Prefer explicit producer declarations such as "BOTTLED BY",
+        // "DISTILLED BY", or "IMPORTED BY". Generic business terminology
+        // such as "DISTILLERY" may legitimately be part of a brand name,
+        // so use it only as a fallback when no explicit declaration exists.
+        var businessIndex =
+            Array.FindIndex(
+                lines,
+                line =>
+                    ProducerPrefixRegex().IsMatch(line));
+
+        if (businessIndex < 0)
+        {
+            businessIndex =
+                Array.FindIndex(
+                    lines,
+                    line =>
+                        ProducerOrBusinessRegex().IsMatch(line));
+        }
 
         if (businessIndex < 0)
         {
