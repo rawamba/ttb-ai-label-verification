@@ -135,7 +135,7 @@ public sealed class LabelFieldParserTests
     public void Parse_WithDegreeSymbolProofDeclaration_ParsesProof()
     {
         var ocrResult = CreateOcrResult(
-            "100° PROOF");
+            "100\u00B0 PROOF");
 
         var result = _parser.Parse(ocrResult);
 
