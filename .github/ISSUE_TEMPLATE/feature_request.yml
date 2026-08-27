@@ -1,0 +1,110 @@
+# TTB AI-Powered Alcohol Label Verification
+# Structured feature-request template.
+#
+# Requests explicitly identify whether they affect AI perception,
+# deterministic compliance logic, infrastructure, or human-review workflow.
+
+name: Feature request
+description: Propose an improvement to the evaluator prototype or its engineering architecture.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature requests should explain the problem before prescribing the implementation.
+
+        Please distinguish **prototype needs** from **future production capabilities**.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: What reviewer, agent, engineering, security, or operational problem should this change address?
+      placeholder: Describe the problem and why it matters.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Primary architecture area
+      options:
+        - User experience
+        - AI / OCR perception
+        - Structured parsing
+        - Deterministic verification
+        - Human review
+        - Batch processing
+        - Application data / COLA adapter boundary
+        - Security / identity
+        - Performance / scalability
+        - Observability
+        - Testing
+        - CI/CD
+        - Infrastructure
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed capability
+      description: Describe the desired behavior without assuming a specific implementation unless necessary.
+      placeholder: Describe what the system should be able to do.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Intended scope
+      description: Is this intended for the evaluator prototype or future production evolution?
+      options:
+        - Evaluator prototype
+        - Production evolution
+        - Both
+        - Not yet determined
+    validations:
+      required: true
+
+  - type: dropdown
+    id: regulatory-impact
+    attributes:
+      label: Regulatory decision impact
+      description: Would the feature change PASS / REVIEW / FAIL behavior?
+      options:
+        - Yes
+        - No
+        - Possibly
+        - Not applicable
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence or acceptance criteria
+      description: How would we know the feature works?
+      placeholder: |
+        Examples:
+        - deterministic tests
+        - benchmark target
+        - evaluator workflow
+        - accessibility behavior
+        - security requirement
+        - regulatory traceability
+    validations:
+      required: true
+
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Important boundaries or exclusions
+      description: Identify anything this request should deliberately not attempt.
+      placeholder: Describe out-of-scope behavior or architecture boundaries.
+    validations:
+      required: false

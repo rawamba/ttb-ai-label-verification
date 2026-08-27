@@ -1,0 +1,123 @@
+# TTB AI-Powered Alcohol Label Verification
+# Structured bug report template.
+#
+# The fields intentionally ask reporters to distinguish technical processing
+# failures from regulatory outcomes and to avoid submitting sensitive data.
+
+name: Bug report
+description: Report reproducible incorrect or unexpected prototype behavior.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve the prototype.
+
+        Please use synthetic or repository-provided test data whenever possible.
+
+        **Do not include credentials, access tokens, production applicant data, non-public COLA information, or sensitive production label images.**
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the prototype appears to be affected?
+      options:
+        - Single-label workflow
+        - Batch workflow
+        - OCR / Azure Document Intelligence
+        - Deterministic verification
+        - Application data adapter
+        - User interface
+        - Performance
+        - Telemetry / logging
+        - CI/CD
+        - Infrastructure
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: What happened?
+      placeholder: Describe the behavior you observed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+      placeholder: Describe the expected behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest reproducible sequence.
+      placeholder: |
+        1. Select application ...
+        2. Upload synthetic fixture ...
+        3. Start verification ...
+        4. Observe ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: result-kind
+    attributes:
+      label: Result category involved
+      description: Select the closest category.
+      options:
+        - Technical ERROR
+        - Regulatory PASS
+        - Regulatory REVIEW
+        - Regulatory FAIL
+        - No result produced
+        - Not applicable
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include only non-sensitive environment information.
+      placeholder: |
+        Branch/commit:
+        Local or deployed:
+        .NET version:
+        Browser:
+        OCR model:
+        Batch concurrency, if relevant:
+    validations:
+      required: false
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Non-sensitive diagnostics
+      description: |
+        Include relevant error categories, correlation IDs, or sanitized logs.
+        Do not include OCR text, document contents, credentials, or private data.
+      placeholder: Paste sanitized diagnostics here.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Reporter confirmation
+      options:
+        - label: I removed credentials, tokens, production applicant data, and other sensitive information.
+          required: true
+        - label: I understand that technical ERROR and regulatory FAIL are different result categories.
+          required: true
