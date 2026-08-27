@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using LabelVerification.Application.Abstractions;
 using LabelVerification.Application.LabelIngestion;
 using LabelVerification.Application.LabelUnderstanding;
@@ -6,6 +7,7 @@ using LabelVerification.Application.Verification.Alcohol;
 using LabelVerification.Application.Verification.Brand;
 using LabelVerification.Application.Verification.GovernmentWarning;
 using LabelVerification.Application.Verification.NetContents;
+using Microsoft.Extensions.Logging;
 
 namespace LabelVerification.Application.Verification.Workflow;
 
@@ -28,6 +30,7 @@ public sealed class LabelVerificationService
     private readonly INetContentsVerifier _netContentsVerifier;
     private readonly IGovernmentWarningVerifier _governmentWarningVerifier;
     private readonly IVerificationResultAggregator _resultAggregator;
+    private readonly ILogger<LabelVerificationService> _logger;
 
     public LabelVerificationService(
         IApplicationRecordProvider applicationRecordProvider,
@@ -38,7 +41,8 @@ public sealed class LabelVerificationService
         IAlcoholValueVerifier alcoholValueVerifier,
         INetContentsVerifier netContentsVerifier,
         IGovernmentWarningVerifier governmentWarningVerifier,
-        IVerificationResultAggregator resultAggregator)
+        IVerificationResultAggregator resultAggregator,
+        ILogger<LabelVerificationService> logger)
     {
         ArgumentNullException.ThrowIfNull(applicationRecordProvider);
         ArgumentNullException.ThrowIfNull(imageValidator);
@@ -49,6 +53,7 @@ public sealed class LabelVerificationService
         ArgumentNullException.ThrowIfNull(netContentsVerifier);
         ArgumentNullException.ThrowIfNull(governmentWarningVerifier);
         ArgumentNullException.ThrowIfNull(resultAggregator);
+        ArgumentNullException.ThrowIfNull(logger);
 
         _applicationRecordProvider = applicationRecordProvider;
         _imageValidator = imageValidator;
@@ -59,6 +64,7 @@ public sealed class LabelVerificationService
         _netContentsVerifier = netContentsVerifier;
         _governmentWarningVerifier = governmentWarningVerifier;
         _resultAggregator = resultAggregator;
+        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -72,16 +78,85 @@ public sealed class LabelVerificationService
     {
         ArgumentNullException.ThrowIfNull(image);
 
+        var correlationId =
+            Guid.NewGuid()
+                .ToString("N");
+
+        var totalStopwatch =
+            Stopwatch.StartNew();
+
+        TimeSpan? ocrDuration = null;
+        TimeSpan? verificationDuration = null;
+
+        var normalizedApplicationId =
+            string.IsNullOrWhiteSpace(applicationId)
+                ? "(missing)"
+                : applicationId.Trim();
+
+        // This is a workflow-level identifier. The Web layer independently
+        // supplies HTTP request correlation through CorrelationIdMiddleware.
+        //
+        // Keeping this identifier within the Application layer also allows
+        // batch, background, CLI, or future COLA-triggered verification to
+        // remain traceable without requiring an HTTP request.
+        using var telemetryScope =
+            _logger.BeginScope(
+                new Dictionary<string, object>
+                {
+                    ["VerificationCorrelationId"] =
+                        correlationId
+                });
+
+        _logger.LogInformation(
+            "Label verification started for application {ApplicationId}.",
+            normalizedApplicationId);
+
+        LabelVerificationSubmissionResult CreateFailure(
+            string errorCode,
+            string errorMessage)
+        {
+            totalStopwatch.Stop();
+
+            var telemetry =
+                new VerificationTelemetry
+                {
+                    CorrelationId = correlationId,
+                    OcrDuration = ocrDuration,
+                    VerificationDuration = verificationDuration,
+                    TotalDuration = totalStopwatch.Elapsed
+                };
+
+            // Only operational metadata is logged. Do not add OCR text,
+            // extracted field values, document bytes, or uploaded filenames.
+            _logger.LogInformation(
+                "Label verification completed for application {ApplicationId}. " +
+                "ResultCategory {ResultCategory}; ErrorCode {ErrorCode}; " +
+                "OcrDurationMs {OcrDurationMs}; " +
+                "VerificationDurationMs {VerificationDurationMs}; " +
+                "TotalDurationMs {TotalDurationMs}.",
+                normalizedApplicationId,
+                "PROCESSING_FAILURE",
+                errorCode,
+                ocrDuration?.TotalMilliseconds,
+                verificationDuration?.TotalMilliseconds,
+                telemetry.TotalDuration.TotalMilliseconds);
+
+            return LabelVerificationSubmissionResult.Failure(
+                errorCode,
+                errorMessage,
+                telemetry);
+        }
+
         if (string.IsNullOrWhiteSpace(applicationId))
         {
-            return LabelVerificationSubmissionResult.Failure(
+            return CreateFailure(
                 "application_required",
                 "Select an application before verifying the label.");
         }
 
         if (string.IsNullOrWhiteSpace(fileName))
         {
-            return LabelVerificationSubmissionResult.Failure(
+            return CreateFailure(
                 "image_required",
                 "Select a label image before verification.");
         }
@@ -95,7 +170,7 @@ public sealed class LabelVerificationService
 
         if (applicationRecord is null)
         {
-            return LabelVerificationSubmissionResult.Failure(
+            return CreateFailure(
                 "application_not_found",
                 $"Application '{applicationId.Trim()}' was not found.");
         }
@@ -105,10 +180,6 @@ public sealed class LabelVerificationService
         // Buffer the upload once so validation and OCR both receive the
         // complete, identical image payload. The prototype already enforces
         // a 10 MB upload limit, making bounded in-memory buffering appropriate.
-        //
-        // A future batch or high-volume production workflow could replace
-        // this with temporary or blob-backed storage without changing the
-        // downstream validation/OCR abstractions.
         await using var bufferedImage =
             new MemoryStream(
                 length > 0 &&
@@ -120,19 +191,15 @@ public sealed class LabelVerificationService
             bufferedImage,
             cancellationToken);
 
-        // Reject an unexpectedly empty stream before invoking validation or
-        // an external AI dependency.
         if (bufferedImage.Length == 0)
         {
-            return LabelVerificationSubmissionResult.Failure(
+            return CreateFailure(
                 "empty_image",
                 "The selected label image is empty.");
         }
 
-        // Validation must start at the beginning of the buffered payload.
         bufferedImage.Position = 0;
 
-        // Reject invalid images before invoking the AI/OCR provider.
         var validationResult =
             await _imageValidator.ValidateAsync(
                 bufferedImage,
@@ -143,27 +210,44 @@ public sealed class LabelVerificationService
 
         if (!validationResult.IsValid)
         {
-            return LabelVerificationSubmissionResult.Failure(
+            return CreateFailure(
                 validationResult.ErrorCode ??
                     "image_validation_failed",
                 validationResult.ErrorMessage ??
                     "The selected label image could not be validated.");
         }
 
-        // Validation may inspect signature bytes. Because this workflow owns
-        // a seekable buffer, explicitly rewind before handing it to OCR rather
-        // than depending on validator implementation details.
         bufferedImage.Position = 0;
 
-        // AI is used for perception: extracting text, confidence, and
-        // available typography evidence from the physical label.
-        var ocrResult =
-            await _textExtractor.ExtractAsync(
-                bufferedImage,
-                cancellationToken);
+        // Measure OCR at the workflow boundary instead of depending on one
+        // provider's internal timing implementation. OcrResult.Duration remains
+        // available separately as provider-owned diagnostic evidence.
+        var ocrStopwatch =
+            Stopwatch.StartNew();
 
-        // Parsing converts OCR evidence into provider-neutral structured
-        // fields without making compliance decisions.
+        OcrResult ocrResult;
+
+        try
+        {
+            ocrResult =
+                await _textExtractor.ExtractAsync(
+                    bufferedImage,
+                    cancellationToken);
+        }
+        finally
+        {
+            ocrStopwatch.Stop();
+
+            ocrDuration =
+                ocrStopwatch.Elapsed;
+        }
+
+        // Verification duration intentionally excludes OCR. This allows the
+        // performance benchmark to distinguish probabilistic AI latency from
+        // deterministic application processing.
+        var verificationStopwatch =
+            Stopwatch.StartNew();
+
         var parsedLabel =
             _fieldParser.Parse(
                 ocrResult);
@@ -171,8 +255,6 @@ public sealed class LabelVerificationService
         var expected =
             applicationRecord.ExpectedData;
 
-        // Objective comparison rules remain deterministic and independent
-        // from the OCR provider.
         var checks =
             new List<VerificationCheckResult>
             {
@@ -202,10 +284,47 @@ public sealed class LabelVerificationService
             _resultAggregator.Aggregate(
                 checks);
 
+        verificationStopwatch.Stop();
+
+        verificationDuration =
+            verificationStopwatch.Elapsed;
+
+        totalStopwatch.Stop();
+
+        var telemetry =
+            new VerificationTelemetry
+            {
+                CorrelationId = correlationId,
+                OcrDuration = ocrDuration,
+                VerificationDuration = verificationDuration,
+                TotalDuration = totalStopwatch.Elapsed
+            };
+
+        var resultCategory =
+            verification.OverallStatus
+                .ToString()
+                .ToUpperInvariant();
+
+        // Deliberately log metadata only. OCR text, uploaded image content,
+        // extracted fields, addresses, warning text, and filenames are not
+        // telemetry fields.
+        _logger.LogInformation(
+            "Label verification completed for application {ApplicationId}. " +
+            "ResultCategory {ResultCategory}; " +
+            "OcrDurationMs {OcrDurationMs}; " +
+            "VerificationDurationMs {VerificationDurationMs}; " +
+            "TotalDurationMs {TotalDurationMs}.",
+            normalizedApplicationId,
+            resultCategory,
+            telemetry.OcrDuration?.TotalMilliseconds,
+            telemetry.VerificationDuration?.TotalMilliseconds,
+            telemetry.TotalDuration.TotalMilliseconds);
+
         return LabelVerificationSubmissionResult.Success(
             applicationRecord,
             ocrResult,
             parsedLabel,
-            verification);
+            verification,
+            telemetry);
     }
 }

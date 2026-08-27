@@ -33,27 +33,36 @@ public sealed record LabelVerificationSubmissionResult
 
     public VerificationResult? Verification { get; init; }
 
+    /// <summary>
+    /// Non-sensitive operational measurements for this verification attempt.
+    /// </summary>
+    public VerificationTelemetry? Telemetry { get; init; }
+
     public static LabelVerificationSubmissionResult Failure(
         string errorCode,
-        string errorMessage) =>
+        string errorMessage,
+        VerificationTelemetry telemetry) =>
         new()
         {
             ProcessingSucceeded = false,
             ErrorCode = errorCode,
-            ErrorMessage = errorMessage
+            ErrorMessage = errorMessage,
+            Telemetry = telemetry
         };
 
     public static LabelVerificationSubmissionResult Success(
         ApplicationRecord applicationRecord,
         OcrResult ocrResult,
         ParsedLabelData parsedLabel,
-        VerificationResult verification) =>
+        VerificationResult verification,
+        VerificationTelemetry telemetry) =>
         new()
         {
             ProcessingSucceeded = true,
             ApplicationRecord = applicationRecord,
             OcrResult = ocrResult,
             ParsedLabel = parsedLabel,
-            Verification = verification
+            Verification = verification,
+            Telemetry = telemetry
         };
 }
