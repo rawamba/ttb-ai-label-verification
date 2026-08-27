@@ -5,8 +5,48 @@ using LabelVerification.Web.Health;
 using LabelVerification.Web.Middleware;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using LabelVerification.Application.Verification.Batch;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Bind batch-processing operational limits at the composition root.
+//
+// Invalid or missing values fall back to conservative prototype defaults.
+// The Application layer receives a concrete options object and remains
+// independent of ASP.NET Core configuration APIs.
+var configuredMaxBatchSize =
+    builder.Configuration[
+        "BatchVerification:MaxBatchSize"];
+
+var maxBatchSize =
+    int.TryParse(
+        configuredMaxBatchSize,
+        out var parsedMaxBatchSize) &&
+    parsedMaxBatchSize > 0
+        ? parsedMaxBatchSize
+        : BatchVerificationOptions.DefaultMaxBatchSize;
+
+var configuredMaxConcurrency =
+    builder.Configuration[
+        "BatchVerification:MaxConcurrency"];
+
+var maxConcurrency =
+    int.TryParse(
+        configuredMaxConcurrency,
+        out var parsedMaxConcurrency) &&
+    parsedMaxConcurrency > 0
+        ? parsedMaxConcurrency
+        : BatchVerificationOptions.DefaultMaxConcurrency;
+
+builder.Services.AddSingleton(
+    new BatchVerificationOptions
+    {
+        MaxBatchSize =
+            maxBatchSize,
+
+        MaxConcurrency =
+            maxConcurrency
+    });
 
 // Register application and infrastructure dependencies through layer-specific
 // extension methods so the Web project remains the composition root.

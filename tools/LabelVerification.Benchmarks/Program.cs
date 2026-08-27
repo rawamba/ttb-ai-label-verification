@@ -1,16 +1,44 @@
-using System.Diagnostics;
-using System.Globalization;
-using System.Runtime.InteropServices;
-using System.Text;
-using System.Text.Json;
 using LabelVerification.Application;
 using LabelVerification.Application.LabelUnderstanding;
+using LabelVerification.Application.Verification.Batch;
 using LabelVerification.Application.Verification.Workflow;
 using LabelVerification.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Diagnostics;
+using System.Globalization;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Json;
+
+
+// Select the requested benchmark mode before initializing the single-label
+// benchmark. TrimStart('-') makes both "batch" and "--batch" valid arguments,
+// which makes invocation more tolerant across shells and developer tooling.
+var runBatchBenchmark =
+    args.Any(
+        argument =>
+            string.Equals(
+                argument.TrimStart('-'),
+                "batch",
+                StringComparison.OrdinalIgnoreCase));
+
+if (runBatchBenchmark)
+{
+    // Emit the selected mode so benchmark evidence clearly shows which
+    // harness produced the subsequent measurements.
+    Console.WriteLine(
+        "Benchmark mode: batch");
+
+    return await BatchBenchmarkRunner.RunAsync();
+}
+
+// No batch argument means the original single-label benchmark remains the
+// default behavior, preserving backwards compatibility with existing scripts.
+Console.WriteLine(
+    "Benchmark mode: single-label");
 
 const string ApplicationId =
     "COLA-84729";
@@ -127,15 +155,33 @@ configuration["DocumentIntelligence:EnableFontStyling"] =
 var services =
     new ServiceCollection();
 
+// Register the real Application-layer verification graph so the benchmark
+// exercises the same workflow services used by the Web application.
 services.AddApplication();
 
+// Register the real Infrastructure layer, including Azure Document
+// Intelligence and the configured application-record provider.
 services.AddInfrastructure(
     configuration);
 
-// The benchmark exercises the production workflow logging path without
-// emitting routine verification logs to the console or benchmark files.
-services.AddSingleton<ILogger<LabelVerificationService>>(
-    NullLogger<LabelVerificationService>.Instance);
+// AddApplication registers LabelVerificationService as part of the normal
+// workflow graph. Because this benchmark uses ValidateOnBuild=true, the DI
+// container validates that service even when another benchmark mode is being
+// selected.
+//
+// The benchmark intentionally avoids routine application log output, so a
+// NullLogger is supplied instead of adding a console logging provider.
+services.AddSingleton<
+    ILogger<LabelVerificationService>>(
+        NullLogger<LabelVerificationService>.Instance);
+
+// The Application layer also registers the batch coordinator. ValidateOnBuild
+// therefore requires its logger even during the original single-label
+// benchmark. Supplying a NullLogger keeps validation complete and the
+// benchmark output focused on measured performance data.
+services.AddSingleton<
+    ILogger<BatchLabelVerificationService>>(
+        NullLogger<BatchLabelVerificationService>.Instance);
 
 using var serviceProvider =
     services.BuildServiceProvider(
