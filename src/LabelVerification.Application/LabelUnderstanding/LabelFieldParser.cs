@@ -80,30 +80,70 @@ public sealed partial class LabelFieldParser : ILabelFieldParser
     {
         ArgumentNullException.ThrowIfNull(ocrResult);
 
+        // Preserve every plausible observed brand candidate while keeping the
+        // first candidate as the parser's backward-compatible default selection.
+        //
+        // Expected application data is intentionally not available here. Parsing
+        // answers only "What does the label appear to say?"
+        var brandNameCandidates =
+            ParseBrandNameCandidates(
+                ocrResult);
+
         return new ParsedLabelData
         {
-            BrandName = ParseBrandName(ocrResult),
-            NameAndAddress = ParseNameAndAddress(ocrResult),
-            CountryOfOrigin = ParseCountryOfOrigin(ocrResult),
-            ClassType = ParseClassType(ocrResult),
-            AlcoholByVolume = ParseAlcoholByVolume(ocrResult),
-            Proof = ParseProof(ocrResult),
-            NetContents = ParseNetContents(ocrResult),
-            GovernmentWarning = ParseGovernmentWarning(ocrResult),
-            IngredientDeclarations = ParseIngredientDeclarations(ocrResult)
+            BrandName =
+                brandNameCandidates.FirstOrDefault(),
+
+            BrandNameCandidates =
+                brandNameCandidates,
+
+            NameAndAddress =
+                ParseNameAndAddress(ocrResult),
+
+            CountryOfOrigin =
+                ParseCountryOfOrigin(ocrResult),
+
+            ClassType =
+                ParseClassType(ocrResult),
+
+            AlcoholByVolume =
+                ParseAlcoholByVolume(ocrResult),
+
+            Proof =
+                ParseProof(ocrResult),
+
+            NetContents =
+                ParseNetContents(ocrResult),
+
+            GovernmentWarning =
+                ParseGovernmentWarning(ocrResult),
+
+            IngredientDeclarations =
+                ParseIngredientDeclarations(ocrResult)
         };
     }
 
     /// <summary>
-    /// Identifies a likely brand-name declaration from OCR lines.
+    /// Identifies plausible brand-name declarations from OCR lines.
     ///
     /// Brand names generally do not have a standard textual prefix, so this
-    /// method uses conservative exclusion rules. Regulatory ambiguity is
-    /// resolved later by verification and human review.
+    /// method uses the prototype's existing conservative exclusion rules.
+    ///
+    /// Unlike the original implementation, all plausible candidates are retained.
+    /// The first candidate remains the parser's default selection so existing
+    /// parsing behavior remains backward compatible.
+    ///
+    /// Expected application data is deliberately not used here. Candidate
+    /// resolution against authoritative application data belongs to the
+    /// verification workflow.
     /// </summary>
-    private static ParsedLabelField<string>? ParseBrandName(
-        OcrResult ocrResult)
+    private static IReadOnlyList<ParsedLabelField<string>>
+        ParseBrandNameCandidates(
+            OcrResult ocrResult)
     {
+        var candidates =
+            new List<ParsedLabelField<string>>();
+
         var governmentWarning =
             ParseGovernmentWarning(ocrResult);
 
@@ -154,17 +194,31 @@ public sealed partial class LabelFieldParser : ILabelFieldParser
                 continue;
             }
 
-            return new ParsedLabelField<string>
+            // Avoid returning duplicate observations when the OCR provider
+            // emits the same line more than once.
+            if (candidates.Any(
+                    candidate =>
+                        string.Equals(
+                            candidate.Value,
+                            text,
+                            StringComparison.OrdinalIgnoreCase)))
             {
-                Value = text,
-                Evidence = text,
-                Confidence = CalculateEvidenceConfidence(
-                    text,
-                    ocrResult)
-            };
+                continue;
+            }
+
+            candidates.Add(
+                new ParsedLabelField<string>
+                {
+                    Value = text,
+                    Evidence = text,
+                    Confidence =
+                        CalculateEvidenceConfidence(
+                            text,
+                            ocrResult)
+                });
         }
 
-        return null;
+        return candidates;
     }
 
     private static bool HasNearbyProducerContext(
