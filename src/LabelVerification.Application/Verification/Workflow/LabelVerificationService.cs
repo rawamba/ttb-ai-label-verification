@@ -302,10 +302,12 @@ public sealed class LabelVerificationService
         // on the uploaded label. The expected value is never substituted for OCR
         // evidence.
         var resolvedBrandName =
-            _brandNameCandidateResolver.Resolve(
-                expected.BrandName,
-                parsedLabel.BrandName,
-                parsedLabel.BrandNameCandidates);
+     _brandNameCandidateResolver.Resolve(
+         expected.BrandName,
+         parsedLabel.BrandName,
+         parsedLabel.BrandNameCandidates,
+         ocrResult,
+         parsedLabel.NameAndAddress);
 
         parsedLabel =
             parsedLabel with
