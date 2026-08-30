@@ -315,11 +315,16 @@ public sealed class BrandNameCandidateResolver
     /// Prevents explicit producer/address evidence from being promoted into a
     /// brand declaration simply because the producer organization has the same
     /// name as the expected brand.
+    ///
+    /// A raw OCR line is excluded only when it is itself producer/address
+    /// evidence. A legitimate standalone brand line must not be rejected merely
+    /// because its text also appears inside a longer producer declaration.
     /// </summary>
     private static bool IsProducerOrAddressEvidence(
         string line,
         ParsedLabelField<ParsedNameAndAddress>? nameAndAddress)
     {
+        // Explicit producer declarations are always producer evidence.
         if (ProducerPrefixes.Any(
                 prefix =>
                     line.StartsWith(
@@ -338,16 +343,34 @@ public sealed class BrandNameCandidateResolver
             return false;
         }
 
-        var normalizedProducerEvidence =
-            NormalizeWhitespace(
-                producerEvidence);
+        // Preserve evidence-line boundaries.
+        //
+        // Do NOT flatten producer evidence and use substring matching here.
+        // For example:
+        //
+        // Producer evidence:
+        //     BOTTLED BY OLD TOM DISTILLERY
+        //
+        // Legitimate standalone brand line:
+        //     OLD TOM DISTILLERY
+        //
+        // The standalone brand is textually contained in the producer
+        // declaration, but it is not itself the producer declaration.
+        var producerEvidenceLines =
+            producerEvidence
+                .Split(
+                    ['\r', '\n'],
+                    StringSplitOptions.RemoveEmptyEntries |
+                    StringSplitOptions.TrimEntries)
+                .Select(
+                    NormalizeWhitespace);
 
-        // Name/address evidence may contain several OCR lines joined together.
-        // Treat a raw line as producer/address evidence when that exact line
-        // occurs within the parser's producer evidence.
-        return normalizedProducerEvidence.Contains(
-            line,
-            StringComparison.OrdinalIgnoreCase);
+        return producerEvidenceLines.Any(
+            evidenceLine =>
+                string.Equals(
+                    evidenceLine,
+                    line,
+                    StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
