@@ -9,7 +9,25 @@ namespace LabelVerification.Application.LabelUnderstanding;
 /// </summary>
 public sealed record ParsedLabelData
 {
+    /// <summary>
+    /// The currently selected brand-name observation.
+    ///
+    /// The parser initially selects the first plausible candidate to preserve
+    /// the prototype's existing behavior. The verification workflow may later
+    /// replace this selection with another observed candidate when the
+    /// authoritative application brand provides a clear deterministic signal.
+    /// </summary>
     public ParsedLabelField<string>? BrandName { get; init; }
+
+    /// <summary>
+    /// All plausible brand-name observations found in OCR evidence.
+    ///
+    /// These are observations from the label only. Expected application data
+    /// is deliberately not used by the parsing layer to create candidates.
+    /// </summary>
+    public IReadOnlyList<ParsedLabelField<string>>
+        BrandNameCandidates
+    { get; init; } = [];
 
     public ParsedLabelField<ParsedNameAndAddress>? NameAndAddress { get; init; }
 
@@ -26,5 +44,6 @@ public sealed record ParsedLabelData
     public ParsedLabelField<string>? GovernmentWarning { get; init; }
 
     public IReadOnlyList<ParsedIngredientDeclaration>
-        IngredientDeclarations { get; init; } = [];
+        IngredientDeclarations
+    { get; init; } = [];
 }

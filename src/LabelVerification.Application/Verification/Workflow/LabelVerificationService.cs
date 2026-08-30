@@ -25,6 +25,7 @@ public sealed class LabelVerificationService
     private readonly ILabelImageValidator _imageValidator;
     private readonly ILabelTextExtractor _textExtractor;
     private readonly ILabelFieldParser _fieldParser;
+    private readonly IBrandNameCandidateResolver _brandNameCandidateResolver;
     private readonly IBrandNameVerifier _brandNameVerifier;
     private readonly IAlcoholValueVerifier _alcoholValueVerifier;
     private readonly INetContentsVerifier _netContentsVerifier;
@@ -33,16 +34,17 @@ public sealed class LabelVerificationService
     private readonly ILogger<LabelVerificationService> _logger;
 
     public LabelVerificationService(
-        IApplicationRecordProvider applicationRecordProvider,
-        ILabelImageValidator imageValidator,
-        ILabelTextExtractor textExtractor,
-        ILabelFieldParser fieldParser,
-        IBrandNameVerifier brandNameVerifier,
-        IAlcoholValueVerifier alcoholValueVerifier,
-        INetContentsVerifier netContentsVerifier,
-        IGovernmentWarningVerifier governmentWarningVerifier,
-        IVerificationResultAggregator resultAggregator,
-        ILogger<LabelVerificationService> logger)
+    IApplicationRecordProvider applicationRecordProvider,
+    ILabelImageValidator imageValidator,
+    ILabelTextExtractor textExtractor,
+    ILabelFieldParser fieldParser,
+    IBrandNameVerifier brandNameVerifier,
+    IAlcoholValueVerifier alcoholValueVerifier,
+    INetContentsVerifier netContentsVerifier,
+    IGovernmentWarningVerifier governmentWarningVerifier,
+    IVerificationResultAggregator resultAggregator,
+    ILogger<LabelVerificationService> logger,
+    IBrandNameCandidateResolver? brandNameCandidateResolver = null)
     {
         ArgumentNullException.ThrowIfNull(applicationRecordProvider);
         ArgumentNullException.ThrowIfNull(imageValidator);
@@ -55,16 +57,43 @@ public sealed class LabelVerificationService
         ArgumentNullException.ThrowIfNull(resultAggregator);
         ArgumentNullException.ThrowIfNull(logger);
 
-        _applicationRecordProvider = applicationRecordProvider;
-        _imageValidator = imageValidator;
-        _textExtractor = textExtractor;
-        _fieldParser = fieldParser;
-        _brandNameVerifier = brandNameVerifier;
-        _alcoholValueVerifier = alcoholValueVerifier;
-        _netContentsVerifier = netContentsVerifier;
-        _governmentWarningVerifier = governmentWarningVerifier;
-        _resultAggregator = resultAggregator;
-        _logger = logger;
+        _applicationRecordProvider =
+            applicationRecordProvider;
+
+        _imageValidator =
+            imageValidator;
+
+        _textExtractor =
+            textExtractor;
+
+        _fieldParser =
+            fieldParser;
+
+        _brandNameVerifier =
+            brandNameVerifier;
+
+        // Production composition supplies the registered resolver. The fallback
+        // keeps existing direct-construction tests and benchmark hosts compatible
+        // while still using exactly the same deterministic brand verifier.
+        _brandNameCandidateResolver =
+            brandNameCandidateResolver ??
+            new BrandNameCandidateResolver(
+                brandNameVerifier);
+
+        _alcoholValueVerifier =
+            alcoholValueVerifier;
+
+        _netContentsVerifier =
+            netContentsVerifier;
+
+        _governmentWarningVerifier =
+            governmentWarningVerifier;
+
+        _resultAggregator =
+            resultAggregator;
+
+        _logger =
+            logger;
     }
 
     /// <inheritdoc />
@@ -248,12 +277,45 @@ public sealed class LabelVerificationService
         var verificationStopwatch =
             Stopwatch.StartNew();
 
+        //var parsedLabel =
+        //    _fieldParser.Parse(
+        //        ocrResult);
+
+        //var expected =
+        //    applicationRecord.ExpectedData;
+
         var parsedLabel =
-            _fieldParser.Parse(
-                ocrResult);
+    _fieldParser.Parse(
+        ocrResult);
 
         var expected =
             applicationRecord.ExpectedData;
+
+        // The parser remains evidence-only and initially selects the first plausible
+        // brand candidate for backward compatibility.
+        //
+        // At this workflow boundary we now have both:
+        // 1. observed OCR-derived candidates, and
+        // 2. the authoritative expected application brand.
+        //
+        // Use the expected value only to resolve among candidates actually observed
+        // on the uploaded label. The expected value is never substituted for OCR
+        // evidence.
+        var resolvedBrandName =
+     _brandNameCandidateResolver.Resolve(
+         expected.BrandName,
+         parsedLabel.BrandName,
+         parsedLabel.BrandNameCandidates,
+         ocrResult,
+         parsedLabel.NameAndAddress);
+
+        parsedLabel =
+            parsedLabel with
+            {
+                BrandName =
+                    resolvedBrandName
+            };
+
 
         var checks =
             new List<VerificationCheckResult>

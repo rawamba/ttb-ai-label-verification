@@ -1,14 +1,14 @@
 using LabelVerification.Application.LabelIngestion;
 using LabelVerification.Application.LabelUnderstanding;
+using LabelVerification.Application.Verification;
 using LabelVerification.Application.Verification.Alcohol;
+using LabelVerification.Application.Verification.Batch;
 using LabelVerification.Application.Verification.Brand;
 using LabelVerification.Application.Verification.GovernmentWarning;
 using LabelVerification.Application.Verification.NetContents;
 using LabelVerification.Application.Verification.Normalization;
 using LabelVerification.Application.Verification.Workflow;
-using LabelVerification.Application.Verification;
 using Microsoft.Extensions.DependencyInjection;
-using LabelVerification.Application.Verification.Batch;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace LabelVerification.Application;
@@ -35,43 +35,59 @@ public static class DependencyInjection
             ILabelImageValidator,
             LabelImageValidator>();
 
-        services.AddSingleton<ILabelFieldParser, LabelFieldParser>();
+        // Convert OCR evidence into structured label observations.
+        services.AddSingleton<
+            ILabelFieldParser,
+            LabelFieldParser>();
+
         // Text normalization is stateless and safe to share for the lifetime
         // of the application.
-        services.AddSingleton<ITextNormalizer, TextNormalizer>();
+        services.AddSingleton<
+            ITextNormalizer,
+            TextNormalizer>();
 
-        // Brand name verification is stateless and safe to share for the lifetime
+        // Brand verification uses conservative deterministic normalization
+        // and fuzzy comparison thresholds.
         services.AddSingleton(
-    new BrandNameVerificationOptions
-    {
-        PassThreshold = 0.95,
-        ReviewThreshold = 0.80
-    });
+            new BrandNameVerificationOptions
+            {
+                PassThreshold = 0.95,
+                ReviewThreshold = 0.80
+            });
 
-        services.AddSingleton<IBrandNameVerifier, BrandNameVerifier>();
+        services.AddSingleton<
+            IBrandNameVerifier,
+            BrandNameVerifier>();
 
-        // Alcohol value verification is stateless and safe to share for the lifetime
-        // No options are needed. These comparisons are deterministic.
+        // Resolve among multiple observed brand candidates using the expected
+        // application brand as a deterministic signal. The resolver never
+        // invents evidence or replaces OCR evidence with application data.
+        services.AddSingleton<
+            IBrandNameCandidateResolver,
+            BrandNameCandidateResolver>();
+
+        // Alcohol value verification is stateless and deterministic.
         services.AddSingleton<
             IAlcoholValueVerifier,
             AlcoholValueVerifier>();
 
         services.AddSingleton<
-     INetContentsNormalizer,
-     NetContentsNormalizer>();
+            INetContentsNormalizer,
+            NetContentsNormalizer>();
 
         services.AddSingleton<
             INetContentsVerifier,
             NetContentsVerifier>();
 
-        // Government warning verification is stateless and safe to share for the lifetime
+        // Government Warning verification evaluates exact regulatory wording
+        // and supported typography evidence.
         services.AddSingleton(
-    new GovernmentWarningVerificationOptions
-    {
-        MinimumOcrConfidence = 0.90,
-        MinimumStyleConfidence = 0.90,
-        RequireBoldHeading = true
-    });
+            new GovernmentWarningVerificationOptions
+            {
+                MinimumOcrConfidence = 0.90,
+                MinimumStyleConfidence = 0.90,
+                RequireBoldHeading = true
+            });
 
         services.AddSingleton<
             IGovernmentWarningVerifier,
@@ -86,8 +102,8 @@ public static class DependencyInjection
         // Provide conservative defaults for hosts that do not explicitly
         // configure batch processing, including tests and benchmarks.
         //
-        // A composition root may register BatchVerificationOptions before calling
-        // AddApplication() to override these defaults.
+        // A composition root may register BatchVerificationOptions before
+        // calling AddApplication() to override these defaults.
         services.TryAddSingleton(
             new BatchVerificationOptions());
 
@@ -103,7 +119,6 @@ public static class DependencyInjection
             IVerificationResultAggregator,
             VerificationResultAggregator>();
 
-       
         return services;
     }
 }
